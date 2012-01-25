@@ -28,6 +28,7 @@ YUI.add('json-parse', function(Y) {
  * complementary functionality, or include the rollup for both.</p>
  *
  * @module json
+ * @main json
  * @class JSON
  * @static
  */
@@ -233,4 +234,4 @@ if ( Native ) {
 Y.JSON.useNativeParse = useNative;
 
 
-}, '3.4.0' );
+}, '3.4.0' ,{requires:['yui-base']});

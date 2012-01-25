@@ -16,7 +16,8 @@ YUI.add('scrollview-scrollbars', function(Y) {
 var getClassName = Y.ClassNameManager.getClassName,
     _classNames,
 
-    NATIVE_TRANSITIONS = Y.Transition.useNative,    
+    Transition = Y.Transition,
+    NATIVE_TRANSITIONS = Transition.useNative,    
     SCROLLBAR = 'scrollbar',
     SCROLLVIEW = 'scrollview',
 
@@ -35,7 +36,7 @@ var getClassName = Y.ClassNameManager.getClassName,
     HORIZ_CACHE = "_sbh",
     VERT_CACHE = "_sbv",
 
-    TRANSITION_PROPERTY = "transitionProperty",
+    TRANSITION_PROPERTY = Transition._VENDOR_PREFIX + "TransitionProperty",
     TRANSFORM = "transform",
 
     TRANSLATE_X = "translateX(",
@@ -81,7 +82,7 @@ _classNames = ScrollbarsPlugin.CLASS_NAMES;
 /**
  * The identity of the plugin
  *
- * @property ScrollViewScrollbars.NAME
+ * @property NAME
  * @type String
  * @default 'pluginScrollViewScrollbars'
  * @static
@@ -91,7 +92,7 @@ ScrollbarsPlugin.NAME = 'pluginScrollViewScrollbars';
 /**
  * The namespace on which the plugin will reside.
  *
- * @property ScrollViewScrollbars.NS
+ * @property NS
  * @type String
  * @default 'scrollbars'
  * @static
@@ -101,7 +102,7 @@ ScrollbarsPlugin.NS = 'scrollbars';
 /**
  * HTML template for the scrollbar
  *
- * @property ScrollViewScrollbars.SCROLLBAR_TEMPLATE
+ * @property SCROLLBAR_TEMPLATE
  * @type Object
  * @static
  */
@@ -116,7 +117,7 @@ ScrollbarsPlugin.SCROLLBAR_TEMPLATE = [
 /**
  * The default attribute configuration for the plugin
  *
- * @property ScrollViewScrollbars.ATTRS
+ * @property ATTRS
  * @type Object
  * @static
  */
@@ -567,4 +568,4 @@ Y.namespace("Plugin").ScrollViewScrollbars = Y.extend(ScrollbarsPlugin, Y.Plugin
 });
 
 
-}, '3.4.0' ,{skinnable:true, requires:['classnamemanager', 'transition', 'plugin']});
+}, '3.4.0' ,{requires:['classnamemanager', 'transition', 'plugin'], skinnable:true});

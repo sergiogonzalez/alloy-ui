@@ -6,6 +6,7 @@ var L = A.Lang,
 	AArray = A.Array,
 
 	ACCEPT_CHILDREN = 'acceptChildren',
+	ALLOW_REMOVE_REQUIRED_FIELDS = 'allowRemoveRequiredFields',
 	AVAILABLE_FIELD_ID = 'availableFieldId',
 	BODY_CONTENT = 'bodyContent',
 	BOOLEAN = 'boolean',
@@ -51,7 +52,6 @@ var L = A.Lang,
 	EMPTY_STR = '',
 	FIELD = 'field',
 	FIELDS = 'fields',
-	FIXED = 'fixed',
 	FOR = 'for',
 	FORM = 'form',
 	FORM_BUILDER = 'formBuilder',
@@ -60,6 +60,7 @@ var L = A.Lang,
 	HELP = 'help',
 	HELPER = 'helper',
 	HIDDEN = 'hidden',
+	HIDDEN_ATTRIBUTES = 'hiddenAttributes',
 	ICON = 'icon',
 	ID = 'id',
 	LABEL = 'label',
@@ -76,6 +77,7 @@ var L = A.Lang,
 	PORTAL_LAYOUT = 'portalLayout',
 	PREDEFINED_VALUE = 'predefinedValue',
 	PROXY = 'proxy',
+	READ_ONLY = 'readOnly',
 	READ_ONLY_ATTRIBUTES = 'readOnlyAttributes',
 	RENDERED = 'rendered',
 	REQUIRED = 'required',
@@ -121,7 +123,6 @@ var L = A.Lang,
 	CSS_FB_FIELD = getCN(FORM, BUILDER, FIELD),
 	CSS_FB_FIELD_BUTTONS = getCN(FORM, BUILDER, FIELD, BUTTONS),
 	CSS_FB_FIELD_SELECTED = getCN(FORM, BUILDER, FIELD, SELECTED),
-	CSS_FB_FIXED = getCN(FORM, BUILDER, FIXED),
 	CSS_FB_ICON = getCN(FORM, BUILDER, ICON),
 	CSS_FB_ICON_DELETE = getCN(FORM, BUILDER, ICON, DELETE),
 	CSS_FB_ICON_DUPLICATE = getCN(FORM, BUILDER, ICON, DUPLICATE),
@@ -150,11 +151,9 @@ var FormBuilderFieldBase = A.Component.create({
 });
 
 var FormBuilderField = A.Component.create({
-
 	NAME: FORM_BUILDER_FIELD,
 
 	ATTRS: {
-
 		acceptChildren: {
 			value: true
 		},
@@ -172,8 +171,9 @@ var FormBuilderField = A.Component.create({
 			value: false
 		},
 
-		fixed: {
-			value: false
+		hiddenAttributes: {
+			validator: isArray,
+			value: []
 		},
 
 		id: {
@@ -205,9 +205,14 @@ var FormBuilderField = A.Component.create({
 			value: EMPTY_STR
 		},
 
+		readOnly: {
+			validator: isBoolean,
+			value: false
+		},
+
 		readOnlyAttributes: {
-			value: [],
-			validator: isArray
+			validator: isArray,
+			value: []
 		},
 
 		required: {
@@ -240,6 +245,7 @@ var FormBuilderField = A.Component.create({
 				no: 'No',
 				options: 'Options',
 				predefinedValue: 'Predefined Value',
+				readOnly: 'Read Only',
 				required: 'Required',
 				reset: 'Reset',
 				showLabel: 'Show Label',
@@ -288,7 +294,7 @@ var FormBuilderField = A.Component.create({
 				var instance = this;
 
 				return A.Node.create(
-					A.substitute(
+					L.sub(
 						TPL_LABEL,
 						{
 							id: instance.get(ID),
@@ -317,7 +323,7 @@ var FormBuilderField = A.Component.create({
 
 	},
 
-	UI_ATTRS: [ACCEPT_CHILDREN, DISABLED, FIELDS, FIXED, LABEL, NAME, PREDEFINED_VALUE, REQUIRED, SELECTED, SHOW_LABEL, TIP, UNIQUE],
+	UI_ATTRS: [ACCEPT_CHILDREN, DISABLED, FIELDS, LABEL, NAME, PREDEFINED_VALUE, REQUIRED, SELECTED, SHOW_LABEL, TIP, UNIQUE],
 
 	EXTENDS: FormBuilderFieldBase,
 
@@ -326,7 +332,7 @@ var FormBuilderField = A.Component.create({
 	},
 
 	buildFieldName: function(type) {
-		return type + (++A.Env._uidx);	
+		return type + (++A.Env._uidx);
 	},
 
 	HTML_PARSER: {
@@ -427,10 +433,18 @@ var FormBuilderField = A.Component.create({
 		getProperties: function() {
 			var instance = this;
 			var propertyModel = instance.getPropertyModel();
+			var hiddenAttributes = instance.get(HIDDEN_ATTRIBUTES);
 			var readOnlyAttributes = instance.get(READ_ONLY_ATTRIBUTES);
+			var properties = [];
 
 			AArray.each(propertyModel, function(property) {
 				var attribute = property.attributeName;
+
+				// TODO - Change checking to use hashes O(1) instead of indexOf arrays O(N)
+				if (AArray.indexOf(hiddenAttributes, attribute) > -1) {
+					return;
+				}
+
 				var value = instance.get(attribute), type = L.type(value);
 
 				if (type === BOOLEAN) {
@@ -439,12 +453,15 @@ var FormBuilderField = A.Component.create({
 
 				property.value = value;
 
+				// TODO - Change checking to use hashes O(1) instead of indexOf arrays O(N)
 				if (AArray.indexOf(readOnlyAttributes, attribute) > -1) {
 					property.editor = false;
 				}
+
+				properties.push(property);
 			});
 
-			return propertyModel;
+			return properties;
 		},
 
 		getPropertyModel: function() {
@@ -472,6 +489,17 @@ var FormBuilderField = A.Component.create({
 					}),
 					formatter: A.bind(instance._booleanFormatter, instance),
 					name: strings[SHOW_LABEL]
+				},
+				{
+					attributeName: READ_ONLY,
+					editor: new A.RadioCellEditor({
+						options: {
+							'true': strings[YES],
+							'false': strings[NO]
+						}
+					}),
+					formatter: A.bind(instance._booleanFormatter, instance),
+					name: strings[READ_ONLY]
 				},
 				{
 					attributeName: REQUIRED,
@@ -537,8 +565,8 @@ var FormBuilderField = A.Component.create({
 
 			controlsToolbar.get(BOUNDING_BOX).hide();
 
-			instance._uiSetFixed(
-				instance.get(FIXED)
+			instance._uiSetRequired(
+				instance.get(REQUIRED)
 			);
 		},
 
@@ -592,12 +620,10 @@ var FormBuilderField = A.Component.create({
 		_handleDeleteEvent: function(event) {
 			var instance = this;
 
-			if (!instance.get(REQUIRED)) {
-				var strings = instance.getStrings();
+			var strings = instance.getStrings();
 
-				if (confirm(strings[DELETE_FIELDS_MESSAGE])) {
-					instance.destroy();
-				}
+			if (confirm(strings[DELETE_FIELDS_MESSAGE])) {
+				instance.destroy();
 			}
 		},
 
@@ -606,26 +632,6 @@ var FormBuilderField = A.Component.create({
 			var builder = instance.get(BUILDER);
 
 			builder.plotFields(val, instance.get(DROP_ZONE_NODE));
-		},
-
-		_uiSetFixed: function(val) {
-			var instance = this;
-			var controlsToolbar = instance.controlsToolbar;
-			var strings = instance.getStrings();
-			
-			if (controlsToolbar) {
-				if (val) {
-					controlsToolbar.remove(DELETE_EVENT);
-				}
-				else {
-					controlsToolbar.add({
-						handler: A.bind(instance._handleDeleteEvent, instance),
-						icon: CLOSE,
-						id: DELETE_EVENT,
-						title: strings[DELETE_MESSAGE]
-					});
-				}
-			}
 		},
 
 		_uiSetLabel: function(val) {
@@ -651,9 +657,25 @@ var FormBuilderField = A.Component.create({
 
 		_uiSetRequired: function(val) {
 			var instance = this;
-			var requiredFlagNode = instance.get(REQUIRED_FLAG_NODE);
+			var builder = instance.get(BUILDER);
+			var controlsToolbar = instance.controlsToolbar;
+			var strings = instance.getStrings();
 
-			requiredFlagNode.toggleClass(CSS_HELPER_HIDDEN, !val);
+			if (controlsToolbar) {
+				if (val && !builder.get(ALLOW_REMOVE_REQUIRED_FIELDS)) {
+					controlsToolbar.remove(DELETE_EVENT);
+				}
+				else {
+					controlsToolbar.add({
+						handler: A.bind(instance._handleDeleteEvent, instance),
+						icon: CLOSE,
+						id: DELETE_EVENT,
+						title: strings[DELETE_MESSAGE]
+					});
+				}
+			}
+
+			instance.get(REQUIRED_FLAG_NODE).toggleClass(CSS_HELPER_HIDDEN, !val);
 		},
 
 		_uiSetSelected: function(val) {

@@ -2,72 +2,70 @@ AUI.add('aui-diagram-builder-connector', function(A) {
 var Lang = A.Lang,
 	isArray = Lang.isArray,
 	isBoolean = Lang.isBoolean,
-	isNumber = Lang.isNumber,
 	isObject = Lang.isObject,
 	isString = Lang.isString,
 
 	AArray = A.Array,
 
-	isAnchor = function(val) {
-		return (val instanceof A.Anchor);
-	},
+	// The first Bernstein basis polynomials (n=3), http://en.wikipedia.org/wiki/B%C3%A9zier_curve
+	// The t in the function for a linear Bézier curve can be thought of as describing how far B(t) is from P0 to P1.
+	// For example when t=0.25, B(t) is one quarter of the way from point P0 to P1. As t varies from 0 to 1, B(t) describes a straight line from P0 to P1.
+	B1 = function(t) { return (t*t*t); },
+	B2 = function(t) { return (3*t*t*(1-t)); },
+	B3 = function(t) { return (3*t*(1-t)*(1-t)); },
+	B4 = function(t) { return ((1-t)*(1-t)*(1-t)); },
 
-	isArrayList = function(val) {
-		return (val instanceof A.ArrayList);
-	},
-
-	isDiagramNode = function(val) {
-		return (val instanceof A.DiagramNode);
+	// Find a Cubic Bezier point based on the control points. Consider the first two control points as the start and end point respectively.
+	getCubicBezier = function(t, startPos, endPos, cp1, cp2) {
+		var x = startPos[0] * B1(t) + cp1[0] * B2(t) + cp2[0] * B3(t) + endPos[0] * B4(t);
+		var y = startPos[1] * B1(t) + cp1[1] * B2(t) + cp2[1] * B3(t) + endPos[1] * B4(t);
+		return [x, y];
 	},
 
 	isGraphic = function(val) {
-		return (val instanceof A.Graphic);
+		return A.instanceOf(val, A.Graphic);
 	},
 
-	ANCHOR = 'anchor',
+	toDegrees = function(angleRadians) {
+	  return angleRadians * 180 / Math.PI;
+	},
+
+	sign = function(x) {
+		return x === 0 ? 0 : (x < 0 ? -1 : 1);
+	},
+
 	ARROW_POINTS = 'arrowPoints',
 	BOUNDING_BOX = 'boundingBox',
 	BUILDER = 'builder',
 	CLICK = 'click',
 	COLOR = 'color',
 	CONNECTOR = 'connector',
-	DATA_ANCHOR = 'dataAnchor',
-	DESCRIPTION = 'description',
-	DIAGRAM = 'diagram',
 	DIAGRAM_NODE = 'diagramNode',
 	FILL = 'fill',
 	GRAPHIC = 'graphic',
-	ID = 'id',
+	HELPER = 'helper',
+	HIDDEN = 'hidden',
 	LAZY_DRAW = 'lazyDraw',
-	MAX = 'max',
-	MAX_SOURCES = 'maxSources',
-	MAX_TARGETS = 'maxTargets',
 	MOUSEENTER = 'mouseenter',
 	MOUSELEAVE = 'mouseleave',
 	NAME = 'name',
-	NODE = 'node',
+	NODE_NAME = 'nodeName',
 	P1 = 'p1',
 	P2 = 'p2',
 	PATH = 'path',
+	REGION = 'region',
 	SELECTED = 'selected',
 	SHAPE = 'shape',
+	SHAPE_ARROW = 'shapeArrow',
+	SHAPE_ARROW_HOVER = 'shapeArrowHover',
+	SHAPE_ARROW_SELECTED = 'shapeArrowSelected',
 	SHAPE_HOVER = 'shapeHover',
 	SHAPE_SELECTED = 'shapeSelected',
-	SOURCES = 'sources',
+	SHOW_NAME = 'showName',
 	STROKE = 'stroke',
-	TARGETS = 'targets',
-	WRAPPER = 'wrapper',
+	VISIBLE = 'visible',
 
-	_DOT = '.',
-	_EMPTY_STR = '',
-	_HASH = '#',
-
-	AgetClassName = A.getClassName,
-
-	CSS_DB_ANCHOR_NODE_MAX_TARGETS = AgetClassName(DIAGRAM, BUILDER, ANCHOR, NODE, MAX, TARGETS),
-	CSS_DB_ANCHOR_NODE_MAX_SOURCES = AgetClassName(DIAGRAM, BUILDER, ANCHOR, NODE, MAX, SOURCES),
-	CSS_DB_ANCHOR_NODE_WRAPPER = AgetClassName(DIAGRAM, BUILDER, ANCHOR, NODE, WRAPPER),
-	CSS_DB_ANCHOR_NODE = AgetClassName(DIAGRAM, BUILDER, ANCHOR, NODE);
+	CSS_HELPER_HIDDEN = A.getClassName(HELPER, HIDDEN);
 
 A.PolygonUtil = {
 	ARROW_POINTS: [
@@ -77,17 +75,16 @@ A.PolygonUtil = {
 		[ 6, 0 ]
 	],
 
-	drawLineArrow: function(shape, x1, y1, x2, y2, arrowPoints) {
+	drawArrow: function(shape, x1, y1, x2, y2, arrowPoints) {
 		var instance = this;
 
-		shape.moveTo(x1, y1);
-		shape.lineTo(x2, y2);
+		var angle = Math.atan2(y2-y1, x2-x1);
 
-		var angle = Math.atan2(y2-y1, x2-x1), centerX = (x2+x1)/2, centerY = (y2+y1)/2;
+		shape.moveTo(x2, y2);
 
-		// Slide the arrow position along the line in 15px in polar coordinates
-		x2 = x2 - 15*Math.cos(angle);
-		y2 = y2 - 15*Math.sin(angle);
+		// Slide the arrow position along the line in 5px in polar coordinates
+		x2 = x2 - 5*Math.cos(angle);
+		y2 = y2 - 5*Math.sin(angle);
 
 		instance.drawPolygon(
 			shape,
@@ -140,18 +137,22 @@ A.PolygonUtil = {
 };
 
 A.Connector = A.Base.create('line', A.Base, [], {
-	SERIALIZABLE_ATTRS: [COLOR, DESCRIPTION, LAZY_DRAW, NAME, SHAPE_SELECTED, SHAPE_HOVER, /*SHAPE,*/ P1, P2],
+	SERIALIZABLE_ATTRS: [COLOR, LAZY_DRAW, NAME, SHAPE_SELECTED, SHAPE_HOVER, /*SHAPE,*/ P1, P2],
 
 	shape: null,
+	shapeArrow: null,
 
 	initializer: function(config) {
 		var instance = this;
 		var lazyDraw = instance.get(LAZY_DRAW);
 
 		instance.after({
+			nameChange: instance._afterNameChange,
 			p1Change: instance.draw,
 			p2Change: instance.draw,
-			selectedChange: instance._afterSelectedChange
+			selectedChange: instance._afterSelectedChange,
+			showNameChange: instance._afterShowNameChange,
+			visibleChange: instance._afterVisibleChange
 		});
 
 		instance._initShapes();
@@ -160,34 +161,82 @@ A.Connector = A.Base.create('line', A.Base, [], {
 			instance.draw();
 		}
 
+		instance._uiSetVisible(instance.get(VISIBLE));
+		instance._uiSetName(instance.get(NAME));
 		instance._uiSetSelected(instance.get(SELECTED), !lazyDraw);
+		instance._uiSetShowName(instance.get(SHOW_NAME));
 	},
 
-	destroy: function() {
+	destructor: function() {
 		var instance = this;
 
-		instance.get(GRAPHIC).removeShape(instance.shape);
+		instance.shape.destroy();
+		instance.shapeArrow.destroy();
+		instance.get(NODE_NAME).remove();
 	},
 
 	draw: function() {
 		var instance = this;
 		var shape = instance.shape;
+		var shapeArrow = instance.shapeArrow;
 
-		var c1 = instance.getCoordinate(instance.get(P1));
-		var c2 = instance.getCoordinate(instance.get(P2));
+		var p1 = instance.get(P1),
+			p2 = instance.get(P2),
+			c1 = instance.toCoordinate(p1),
+			c2 = instance.toCoordinate(p2),
+			x1 = c1[0],
+			y1 = c1[1],
+			x2 = c2[0],
+			y2 = c2[1],
+			dx = Math.max(Math.abs(x1 - x2) / 2, 10),
+			dy = Math.max(Math.abs(y1 - y2) / 2, 10),
+
+			curveArgs = null,
+			nQuadrantSections = 8,
+			angle = toDegrees(Math.atan2(y2-y1, x2-x1)),
+			pseudoQuadrant = Math.round(Math.abs(angle)/(360/nQuadrantSections));
+
+		if (sign(angle) < 0) {
+			curveArgs = [
+				[x1+dx, y1, x2-dx, y2, x2, y2], //3,6
+				[x1+dx, y1, x2, y1-dy, x2, y2], //3,5
+				[x1, y1-dy, x2, y1-dy, x2, y2], //0,5
+				[x1-dx, y1, x2, y1-dy, x2, y2], //2,5
+				[x1-dx, y1, x2+dx, y2, x2, y2] //2,7
+			];
+		}
+		else {
+			curveArgs = [
+				[x1+dx, y1, x2-dx, y2, x2, y2], //3,6
+				[x1+dx, y1, x2, y1+dy, x2, y2], //3,4
+				[x1, y1+dy, x2, y1+dy, x2, y2], //1,4
+				[x1-dx, y1, x2, y1+dy, x2, y2], //2,4
+				[x1-dx, y1, x2+dx, y2, x2, y2] //2,7
+			];
+		}
+
+		var cp = curveArgs[pseudoQuadrant];
 
 		shape.clear();
-
-		A.PolygonUtil.drawLineArrow(shape, c1[0], c1[1], c2[0], c2[1], instance.get(ARROW_POINTS));
-
+		shape.moveTo(x1, y1);
+		shape.curveTo.apply(shape, cp);
 		shape.end();
-	},
 
-	getCoordinate: function(p) {
-		var instance = this;
-		var xy = instance.get(GRAPHIC).getXY();
+		// Extract the angle from a segment of the current Cubic Bezier curve to rotate the arrow.
+		// The segment should be an extremities for better angle extraction, on this particular case t = [0 to 0.025].
+		var xy1 = getCubicBezier(0, [x1, y1], [x2, y2], [cp[0], cp[1]], [cp[2], cp[3]]),
+			xy2 = getCubicBezier(0.075, [x1, y1], [x2, y2], [cp[0], cp[1]], [cp[2], cp[3]]),
+			centerXY = getCubicBezier(0.5, [x1, y1], [x2, y2], [cp[0], cp[1]], [cp[2], cp[3]]);
 
-		return [ p[0] - xy[0], p[1] - xy[1] ];
+		shapeArrow.clear();
+		A.PolygonUtil.drawArrow(shapeArrow, xy2[0], xy2[1], xy1[0], xy1[1], instance.get(ARROW_POINTS));
+		shapeArrow.end();
+
+		if (instance.get(SHOW_NAME)) {
+			instance.get(NODE_NAME).center(instance.toXY(centerXY));
+		}
+
+		return instance;
 	},
 
 	getProperties: function() {
@@ -203,15 +252,9 @@ A.Connector = A.Base.create('line', A.Base, [], {
 
 	getPropertyModel: function() {
 		var instance = this;
-		var anchor = instance.get(ANCHOR);
-		var strings = anchor ? anchor.get(DIAGRAM_NODE).getStrings() : {};
+		var strings = instance.getStrings();
 
 		return [
-			{
-				attributeName: DESCRIPTION,
-				editor: new A.TextAreaCellEditor(),
-				name: strings[DESCRIPTION]
-			},
 			{
 				attributeName: NAME,
 				editor: new A.TextCellEditor({
@@ -228,6 +271,32 @@ A.Connector = A.Base.create('line', A.Base, [], {
 		];
 	},
 
+	getStrings: function() {
+		return A.Connector.STRINGS;
+	},
+
+	hide: function() {
+		var instance = this;
+
+		instance.set(VISIBLE, false);
+
+		return instance;
+	},
+
+	show: function() {
+		var instance = this;
+
+		instance.set(VISIBLE, true);
+
+		return instance;
+	},
+
+	toCoordinate: function(coord) {
+		var instance = this;
+
+		return instance._offsetXY(coord, -1);
+	},
+
 	toJSON: function() {
 		var instance = this;
 		var output = {};
@@ -239,10 +308,36 @@ A.Connector = A.Base.create('line', A.Base, [], {
 		return output;
 	},
 
+	toXY: function(coord) {
+		var instance = this;
+
+		return instance._offsetXY(coord, 1);
+	},
+
+	_afterNameChange: function(event) {
+	    var instance = this;
+
+		instance._uiSetName(event.newVal);
+
+		instance.draw();
+	},
+
 	_afterSelectedChange: function(event) {
 		var instance = this;
 
 		instance._uiSetSelected(event.newVal);
+	},
+
+	_afterShowNameChange: function(event) {
+		var instance = this;
+
+		instance._uiSetShowName(event.newVal);
+	},
+
+	_afterVisibleChange: function(event) {
+	    var instance = this;
+
+		instance._uiSetVisible(event.newVal);
 	},
 
 	_initShapes: function() {
@@ -252,19 +347,30 @@ A.Connector = A.Base.create('line', A.Base, [], {
 			instance.get(SHAPE)
 		);
 
+		var shapeArrow = instance.shapeArrow = instance.get(GRAPHIC).addShape(
+			instance.get(SHAPE_ARROW)
+		);
+
 		shape.on(CLICK, A.bind(instance._onShapeClick, instance));
 		shape.on(MOUSEENTER, A.bind(instance._onShapeMouseEnter, instance));
 		shape.on(MOUSELEAVE, A.bind(instance._onShapeMouseLeave, instance));
+		shapeArrow.on(CLICK, A.bind(instance._onShapeClick, instance));
+		instance.get(NODE_NAME).on(CLICK, A.bind(instance._onShapeClick, instance));
+	},
+
+	_offsetXY: function(xy, sign) {
+		var instance = this;
+		var offsetXY = instance.get(GRAPHIC).getXY();
+
+		return [ xy[0] + offsetXY[0]*sign, xy[1] + offsetXY[1]*sign ];
 	},
 
 	_onShapeClick: function(event) {
 		var instance = this;
-		var anchor = instance.get(ANCHOR);
+		var builder = instance.get(BUILDER);
 		var selected = instance.get(SELECTED);
 
-		if (anchor) {
-			var builder = anchor.getBuilder();
-
+		if (builder) {
 			if (event.hasModifier()) {
 				builder.closeEditProperties();
 			}
@@ -281,13 +387,24 @@ A.Connector = A.Base.create('line', A.Base, [], {
 		}
 
 		instance.set(SELECTED, !selected);
+
+		event.halt();
 	},
 
 	_onShapeMouseEnter: function(event) {
 		var instance = this;
 
 		if (!instance.get(SELECTED)) {
-			instance._updateShape(instance.get(SHAPE_HOVER));
+			var shapeHover = instance.get(SHAPE_HOVER);
+			var shapeArrowHover = instance.get(SHAPE_ARROW_HOVER);
+
+			if (shapeHover) {
+				instance._updateShape(instance.shape, shapeHover);
+			}
+
+			if (shapeArrowHover) {
+				instance._updateShape(instance.shapeArrow, shapeArrowHover);
+			}
 		}
 	},
 
@@ -295,8 +412,20 @@ A.Connector = A.Base.create('line', A.Base, [], {
 		var instance = this;
 
 		if (!instance.get(SELECTED)) {
-			instance._updateShape(instance.get(SHAPE));
+			instance._updateShape(instance.shape, instance.get(SHAPE));
+			instance._updateShape(instance.shapeArrow, instance.get(SHAPE_ARROW));
 		}
+	},
+
+	_setNodeName: function(val) {
+		var instance = this;
+
+		if (!A.instanceOf(val, A.Node)) {
+			val = new A.Template(val).render();
+			instance.get(BUILDER).canvas.append(val.unselectable());
+		}
+
+		return val;
 	},
 
 	_setShape: function(val) {
@@ -307,19 +436,63 @@ A.Connector = A.Base.create('line', A.Base, [], {
 				type: PATH,
 				stroke: {
 					color: instance.get(COLOR),
-					weight: 3
-				},
-				fill: {
-					color: instance.get(COLOR)
+					weight: 2,
+					opacity: 1
 				}
 			},
 			val
 		);
 	},
 
-	_updateShape: function(cShape, draw) {
+	_setShapeArrow: function(val) {
 		var instance = this;
-		var shape = instance.shape;
+
+		return A.merge(
+			{
+				type: PATH,
+				fill: {
+					color: instance.get(COLOR),
+					opacity: 1
+				},
+				stroke: {
+					color: instance.get(COLOR),
+					weight: 2,
+					opacity: 1
+				}
+			},
+			val
+		);
+	},
+
+	_uiSetName: function(val) {
+		var instance = this;
+
+		instance.get(NODE_NAME).html(val);
+	},
+
+	_uiSetSelected: function(val, draw) {
+		var instance = this;
+
+		instance._updateShape(instance.shape, val ? instance.get(SHAPE_SELECTED) : instance.get(SHAPE), draw);
+		instance._updateShape(instance.shapeArrow, val ? instance.get(SHAPE_ARROW_SELECTED) : instance.get(SHAPE_ARROW), draw);
+	},
+
+	_uiSetShowName: function(val) {
+		var instance = this;
+
+		instance.get(NODE_NAME).toggleClass(CSS_HELPER_HIDDEN, !val);
+	},
+
+	_uiSetVisible: function(val) {
+		var instance = this;
+
+		instance.shape.set(VISIBLE, val);
+		instance.shapeArrow.set(VISIBLE, val);
+		instance._uiSetShowName(val && instance.get(SHOW_NAME));
+	},
+
+	_updateShape: function(shape, cShape, draw) {
+		var instance = this;
 
 		if (cShape.hasOwnProperty(FILL)) {
 			shape.set(FILL, cShape[FILL]);
@@ -332,16 +505,14 @@ A.Connector = A.Base.create('line', A.Base, [], {
 		if (draw !== false) {
 			instance.draw();
 		}
-	},
-
-	_uiSetSelected: function(val, draw) {
-		var instance = this;
-
-		instance._updateShape(val ? instance.get(SHAPE_SELECTED) : instance.get(SHAPE), draw);
 	}
 },{
 	ATTRS: {
-		anchor: {
+		arrowPoints: {
+			value: A.PolygonUtil.ARROW_POINTS
+		},
+
+		builder: {
 		},
 
 		color: {
@@ -349,9 +520,8 @@ A.Connector = A.Base.create('line', A.Base, [], {
 			validator: isString
 		},
 
-		description: {
-			value: _EMPTY_STR,
-			validator: isString
+		graphic: {
+			validator: isGraphic
 		},
 
 		lazyDraw: {
@@ -368,20 +538,20 @@ A.Connector = A.Base.create('line', A.Base, [], {
 			validator: isString
 		},
 
-		graphic: {
-			validator: isGraphic
+		nodeName: {
+			setter: '_setNodeName',
+			value: [ '<span class="{$ans}diagram-builder-connector-name"></span>' ],
+			writeOnce: true
 		},
 
-		shapeHover: {
-			value: {
-				fill: {
-					color: '#666'
-				},
-				stroke: {
-					color: '#666',
-					weight: 5
-				}
-			}
+		p1: {
+			value: [0, 0],
+			validator: isArray
+		},
+
+		p2: {
+			value: [0, 0],
+			validator: isArray
 		},
 
 		selected: {
@@ -394,451 +564,76 @@ A.Connector = A.Base.create('line', A.Base, [], {
 			setter: '_setShape'
 		},
 
-		shapeSelected: {
+		shapeArrow: {
+			value: null,
+			setter: '_setShapeArrow'
+		},
+
+		shapeArrowHover: {
 			value: {
 				fill: {
-					color: '#000'
+					color: '#ffd700'
 				},
 				stroke: {
-					color: '#000',
-					weight: 5
+					color: '#ffd700',
+					weight: 5,
+					opacity: 0.8
 				}
 			}
 		},
 
-		arrowPoints: {
-			value: A.PolygonUtil.ARROW_POINTS
-		},
-
-		p1: {
-			value: [0, 0],
-			validator: isArray
-		},
-
-		p2: {
-			value: [0, 0],
-			validator: isArray
-		}
-	}
-});
-
-A.Anchor = A.Base.create('anchor', A.Base, [], {
-	ANCHOR_WRAPPER_TEMPLATE: '<div class="' + CSS_DB_ANCHOR_NODE_WRAPPER + '"></div>',
-	NODE_TEMPLATE: '<div class="' + CSS_DB_ANCHOR_NODE + '"></div>',
-
-	connectors: null,
-
-	initializer: function() {
-		var instance = this;
-
-		instance.connectors = {};
-
-		instance._renderNode();
-
-		instance.connectTargets();
-
-		instance.after({
-			sourcesChange: instance._afterSourcesChange,
-			targetsChange: instance._afterTargetsChange
-		});
-
-		instance._uiSetMaxTargets(
-			instance.get(MAX_TARGETS)
-		);
-	},
-
-	addSource: function(source) {
-		var instance = this;
-
-		if (instance.get(SOURCES).size() < instance.get(MAX_SOURCES)) {
-			instance.set(
-				SOURCES,
-				instance.get(SOURCES).remove(source).add(source)
-			);
-		}
-
-		return instance;
-	},
-
-	addTarget: function(target) {
-		var instance = this;
-
-		if (instance.get(TARGETS).size() < instance.get(MAX_TARGETS)) {
-			instance.set(
-				TARGETS,
-				instance.get(TARGETS).remove(target).add(target)
-			);
-		}
-
-		return instance;
-	},
-
-	alignConnectors: function() {
-		var instance = this;
-
-		instance.get(TARGETS).each(function(target) {
-			var tConnector = instance.getConnector(target);
-
-			if (tConnector) {
-				tConnector.set(P1, instance.getCenterXY());
-				tConnector.set(P2, target.getCenterXY());
-			}
-		});
-
-		instance.get(SOURCES).each(function(source) {
-			var sConnector = source.getConnector(instance);
-
-			if (sConnector) {
-				sConnector.set(P1, source.getCenterXY());
-				sConnector.set(P2, instance.getCenterXY());
-			}
-		});
-
-		return instance;
-	},
-
-	destroy: function() {
-		var instance = this;
-
-		instance.disconnectTargets();
-		instance.disconnectSources();
-
-		instance.get(NODE).remove();
-	},
-
-	connect: function(target, connector) {
-		var instance = this;
-
-		if (isDiagramNode(target)) {
-			target = target.findAvailableAnchor();
-		}
-
-		instance.addTarget(target);
-		target.addSource(instance);
-
-		if (!instance.isConnected(target)) {
-			var c = A.merge(target.get(CONNECTOR), connector);
-
-			c.anchor = instance;
-			c.p1 = instance.getCenterXY();
-			c.p2 = target.getCenterXY();
-
-			instance.connectors[target.get(ID)] = new A.Connector(c);
-		}
-
-		setTimeout(function() {
-			target.get(DIAGRAM_NODE).syncDropTargets();
-		}, 50);
-
-		return instance;
-	},
-
-	connectTargets: function() {
-		var instance = this;
-
-		instance.get(TARGETS).each(A.bind(instance.connect, instance));
-
-		return instance;
-	},
-
-	disconnect: function(target) {
-		var instance = this;
-
-		instance.getConnector(target).destroy();
-		instance.removeTarget(target);
-		target.removeSource(instance);
-
-		setTimeout(function() {
-			target.get(DIAGRAM_NODE).syncDropTargets();
-		}, 50);
-	},
-
-	disconnectTargets: function() {
-		var instance = this;
-
-		instance.get(TARGETS).each(function(target) {
-			instance.disconnect(target);
-		});
-
-		return instance;
-	},
-
-	disconnectSources: function() {
-		var instance = this;
-
-		instance.get(SOURCES).each(function(source) {
-			source.disconnect(instance);
-		});
-
-		return instance;
-	},
-
-	findConnectorTarget: function(connector) {
-		var instance = this;
-		var target = null;
-
-		A.some(instance.connectors, function(c, targetId) {
-			if (c === connector) {
-				target = A.Anchor.getAnchorByNode(_HASH+targetId);
-				return true;
-			}
-		});
-
-		return target;
-	},
-
-	getBuilder: function() {
-		var instance = this;
-
-		return instance.get(DIAGRAM_NODE).get(BUILDER);
-	},
-
-	getCenterXY: function() {
-		var instance = this;
-
-		return instance.get(NODE).getCenterXY();
-	},
-
-	getConnector: function(target) {
-		var instance = this;
-
-		return instance.connectors[target.get(ID)];
-	},
-
-	hasConnection: function() {
-		var instance = this;
-
-		return ((instance.get(TARGETS).size() > 0) || (instance.get(SOURCES).size() > 0));
-	},
-
-	isConnected: function(target) {
-		var instance = this;
-
-		return instance.connectors.hasOwnProperty(target.get(ID));
-	},
-
-	removeSource: function(source) {
-		var instance = this;
-
-		instance.set(
-			SOURCES,
-			instance.get(SOURCES).remove(source)
-		);
-
-		return instance;
-	},
-
-	removeTarget: function(target) {
-		var instance = this;
-
-		instance.set(
-			TARGETS,
-			instance.get(TARGETS).remove(target)
-		);
-
-		delete instance.connectors[target.get(ID)];
-		return instance;
-	},
-
-	_afterSourcesChange: function(event) {
-		var instance = this;
-
-		instance._uiSetSources(event.newVal);
-	},
-
-	_afterTargetsChange: function(event) {
-		var instance = this;
-
-		// TODO - event.prevVal is always equal to event.newVal, review this
-        // logic below, references between anchors needs to be cleaned up otherwise
-        // will store the wrong relationship between nodes.
-
-		event.prevVal.each(function(anchor) {
-			anchor.removeSource(instance);
-		});
-
-		event.newVal.each(function(anchor) {
-			anchor.addSource(instance);
-		});
-
-		instance._uiSetTargets(event.newVal);
-	},
-
-	_renderNode: function() {
-		var instance = this;
-		var diagramNode = instance.get(DIAGRAM_NODE);
-		var container = diagramNode.get(BOUNDING_BOX);
-
-		instance.wrapper = container.one(_DOT+CSS_DB_ANCHOR_NODE_WRAPPER) ||
-							A.Node.create(instance.ANCHOR_WRAPPER_TEMPLATE);
-
-		instance.wrapper.appendTo(container).appendChild(instance.get(NODE));
-	},
-
-	_setConnector: function(val) {
-		var instance = this;
-
-		return A.merge(
-			{
-				graphic: instance.getBuilder().get(GRAPHIC)
-			},
-			val
-		);
-	},
-
-	_setSources: function(val) {
-		var instance = this;
-
-		return instance._setAnchors(val);
-	},
-
-	_setTargets: function(val) {
-		var instance = this;
-
-		val = instance._setAnchors(val, true);
-
-		val.each(function(anchor) {
-			anchor.addSource(instance);
-		});
-
-		return val;
-	},
-
-	_setAnchors: function(val, target) {
-		var instance = this;
-
-		if (!isArrayList(val)) {
-			var targets = [];
-
-			A.Array.some(val, function(target, index) {
-				if (index >= instance.get(target ? MAX_TARGETS : MAX_SOURCES)) {
-					return true;
+		shapeArrowSelected: {
+			value: {
+				fill: {
+					color: '#ff6600'
+				},
+				stroke: {
+					color: '#ff6600',
+					weight: 5,
+					opacity: 0.8
 				}
-
-				targets.push( isAnchor(target) ? target : new A.Anchor(target) );
-			});
-
-			val = new A.ArrayList(targets);
-		}
-
-		return val;
-	},
-
-	_setMaxSources: function(val) {
-		var instance = this;
-
-		instance._uiSetMaxSources(
-			instance.get(MAX_SOURCES)
-		);
-
-		return val;
-	},
-
-	_setMaxTargets: function(val) {
-		var instance = this;
-
-		instance._uiSetMaxTargets(
-			instance.get(MAX_TARGETS)
-		);
-
-		return val;
-	},
-
-	_setNode: function(val) {
-		var instance = this;
-		var id = instance.get(ID);
-
-		return A.one(val).set(ID, id).setData(DATA_ANCHOR, instance);
-	},
-
-	_uiSetSources: function(val) {
-		var instance = this;
-
-		instance._uiSetMaxSources(
-			instance.get(MAX_SOURCES)
-		);
-	},
-
-	_uiSetMaxSources: function(val) {
-		var instance = this;
-		var node = instance.get(NODE);
-
-		node.toggleClass(CSS_DB_ANCHOR_NODE_MAX_SOURCES, (instance.get(SOURCES).size() === val));
-	},
-
-	_uiSetMaxTargets: function(val) {
-		var instance = this;
-		var node = instance.get(NODE);
-
-		node.toggleClass(CSS_DB_ANCHOR_NODE_MAX_TARGETS, (instance.get(TARGETS).size() === val));
-	},
-
-	_uiSetTargets: function(val) {
-		var instance = this;
-
-		instance._uiSetMaxTargets(
-			instance.get(MAX_TARGETS)
-		);
-	}
-},{
-	ATTRS: {
-		diagramNode: {
+			}
 		},
 
-		connector: {
-			setter: '_setConnector',
+		shapeHover: {
+			value: {
+				stroke: {
+					color: '#ffd700',
+					weight: 5,
+					opacity: 0.8
+				}
+			}
+		},
+
+		shapeSelected: {
+			value: {
+				stroke: {
+					color: '#ff6600',
+					weight: 5,
+					opacity: 0.8
+				}
+			}
+		},
+
+		showName: {
+			validator: isBoolean,
+			value: true
+		},
+
+		transition: {
 			value: {},
 			validator: isObject
 		},
 
-		id: {
-			readOnly: true,
-			valueFn: function() {
-				return A.guid();
-			}
-		},
-
-		maxSources: {
-			setter: '_setMaxSources',
-			value: 1,
-			validator: isNumber
-		},
-
-		maxTargets: {
-			setter: '_setMaxTargets',
-			value: 1,
-			validator: isNumber
-		},
-
-		node: {
-			setter: '_setNode',
-			valueFn: function() {
-				var instance = this;
-
-				return A.Node.create(instance.NODE_TEMPLATE);
-			}
-		},
-
-		sources: {
-			value: [],
-			setter: '_setSources',
-			validator: function(val) {
-				return isArray(val) || isArrayList(val);
-			}
-		},
-
-		targets: {
-			value: [],
-			setter: '_setTargets',
-			validator: function(val) {
-				return isArray(val) || isArrayList(val);
-			}
+		visible: {
+			validator: isBoolean,
+			value: true
 		}
 	},
 
-	getAnchorByNode: function(node) {
-		return isAnchor(node) ? node : A.one(node).getData(DATA_ANCHOR);
+	STRINGS: {
+		name: 'Name'
 	}
 });
 
-}, '@VERSION@' ,{requires:['aui-base','arraylist-add','arraylist-filter','json','graphics','dd'], skinnable:true});
+}, '@VERSION@' ,{skinnable:true, requires:['aui-base','aui-template','arraylist-add','arraylist-filter','json','graphics','dd']});

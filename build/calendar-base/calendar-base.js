@@ -41,6 +41,7 @@ var getCN                 = Y.ClassNameManager.getClassName,
     substitute  = Y.substitute,
     each        = Y.each,
     hasVal      = Y.Array.hasValue,
+    iOf         = Y.Array.indexOf,
     hasKey      = Y.Object.hasKey,
     setVal      = Y.Object.setValue,
     owns        = Y.Object.owns,
@@ -94,7 +95,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
    * @type String
    * @private
    */
-  _calendarId : Y.guid(CALENDAR),
+  _calendarId : null,
 
   /**
    * The hash map of selected dates, populated with
@@ -140,10 +141,17 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
   /**
    * Designated initializer
+   * Initializes instance-level properties of
+   * calendar.
    *
    * @method initializer
    */  
   initializer : function () {
+    this._paneProperties = {};
+    this._calendarId = Y.guid('calendar');
+    this._selectedDates = {};
+    this._rules = {};
+    this.storedDateCells = {};
   },
 
   /**
@@ -306,13 +314,14 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
           return true;
       }
       else {
-        var elements = strList.split(",");
+        var elements = strList.split(","),
+            val;
         for (val in elements) {
             var range = elements[val].split("-");
-            if (range.length == 2 && num >= parseInt(range[0]) && num <= parseInt(range[1])) {
+            if (range.length == 2 && num >= parseInt(range[0], 10) && num <= parseInt(range[1], 10)) {
                 return true;
             }
-            else if (range.length == 1 && (parseInt(elements[val]) == num)) {
+            else if (range.length == 1 && (parseInt(elements[val], 10) == num)) {
                 return true;
             }
         }
@@ -336,7 +345,9 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
           date = oDate.getDate(),
           wday = oDate.getDay(),
           rules = this._rules, 
-          outputRules = [];
+          outputRules = [],
+          years, months, dates, days;
+
       for (years in rules) {
           if (this._isNumInList(year, years)) {
               if (L.isString(rules[years])) {
@@ -386,7 +397,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
      *
      */
     _matchesRule : function (oDate, rule) {
-        return (this._getRulesForDate(oDate).indexOf(rule) >= 0);
+        return (iOf(this._getRulesForDate(oDate), rule) >= 0);
     },
 
     /**
@@ -506,17 +517,24 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
      * @private
      */
     _addDateRangeToSelection : function (startDate, endDate) {
-        var startTime = startDate.getTime(),
+        var timezoneDifference = (endDate.getTimezoneOffset() - startDate.getTimezoneOffset())*60000,
+            startTime = startDate.getTime(),
             endTime   = endDate.getTime();
-        
+            
             if (startTime > endTime) {
                 var tempTime = startTime;
                 startTime = endTime;
-                endTime = tempTime;
+                endTime = tempTime + timezoneDifference;
+            }
+            else {
+                endTime = endTime - timezoneDifference;
             }
 
+
         for (var time = startTime; time <= endTime; time += 86400000) {
-            this._addDateToSelection(new Date(time), time);
+            var addedDate = new Date(time);
+                addedDate.setHours(12);
+            this._addDateToSelection(addedDate, time);
         }
         this._fireSelectionChange();
     },
@@ -595,6 +613,13 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
      * @private
      */
     _fireSelectionChange : function () {
+
+   /**
+     * Fired when the set of selected dates changes. Contains a payload with
+     * a `newSelection` property with an array of selected dates.
+     *
+     * @event selectionChange
+     */
       this.fire("selectionChange", {newSelection: this._getSelectedDatesList()});
     },
 
@@ -604,7 +629,8 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
      * @private
      */
     _restoreModifiedCells : function () {
-      var contentbox = this.get("contentBox");
+      var contentbox = this.get("contentBox"),
+          id;
       for (id in this._storedDateCells) {
           contentbox.one("#" + id).replace(this._storedDateCells[id]);
           delete this._storedDateCells[id];
@@ -632,8 +658,8 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
                 var matchingRules = this._getRulesForDate(date);
                 if (matchingRules.length > 0) {
                     var dateNode = this._dateToNode(date);
-                    if ((enRule && !(matchingRules.indexOf(enRule) >= 0)) ||
-                        (disRule && (matchingRules.indexOf(disRule) >= 0))) {
+                    if ((enRule && !(iOf(matchingRules, enRule) >= 0)) ||
+                        (disRule && (iOf(matchingRules, disRule) >= 0))) {
                             dateNode.addClass(SELECTION_DISABLED);
                         }
                         
@@ -750,12 +776,12 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
      */
   _nodeToDate : function (oNode) {
     
-        var idParts = oNode.get("id").split("_"),
-            paneNum = parseInt(idParts[8]),
-            day  = parseInt(idParts[10]);
+        var idParts = oNode.get("id").split("_").reverse(),
+            paneNum = parseInt(idParts[2], 10),
+            day  = parseInt(idParts[0], 10);
 
-        var shiftedDate = ydate.addMonths(this.get("date"), paneNum);
-            year = shiftedDate.getFullYear();
+        var shiftedDate = ydate.addMonths(this.get("date"), paneNum),
+            year = shiftedDate.getFullYear(),
             month = shiftedDate.getMonth();
 
     return new Date(year, month, day, 12, 0, 0, 0);
@@ -1301,7 +1327,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
   
    /**
     * The CSS classnames for the calendar templates.
-    * @property CalendarBase.CALENDAR_STRINGS
+    * @property CALENDAR_STRINGS
     * @type Object
     * @readOnly
     * @protected
@@ -1324,7 +1350,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
    /**
     * The main content template for calendar.
-    * @property CalendarBase.CONTENT_TEMPLATE
+    * @property CONTENT_TEMPLATE
     * @type String
     * @protected
     * @static
@@ -1338,7 +1364,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
    /**
     * A single pane template for calendar (same as default CONTENT_TEMPLATE)
-    * @property CalendarBase.ONE_PANE_TEMPLATE
+    * @property ONE_PANE_TEMPLATE
     * @type String
     * @protected
     * @readOnly
@@ -1353,7 +1379,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
    /**
     * A two pane template for calendar.
-    * @property CalendarBase.TWO_PANE_TEMPLATE
+    * @property TWO_PANE_TEMPLATE
     * @type String
     * @protected
     * @readOnly
@@ -1374,7 +1400,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
                  '</div>',
    /**
     * A three pane template for calendar.
-    * @property CalendarBase.THREE_PANE_TEMPLATE
+    * @property THREE_PANE_TEMPLATE
     * @type String
     * @protected
     * @readOnly
@@ -1398,7 +1424,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
                  '</div>',
    /**
     * A template for the calendar grid.
-    * @property CalendarBase.CALENDAR_GRID_TEMPLATE
+    * @property CALENDAR_GRID_TEMPLATE
     * @type String
     * @protected
     * @static
@@ -1414,7 +1440,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
    /**
     * A template for the calendar header.
-    * @property CalendarBase.HEADER_TEMPLATE
+    * @property HEADER_TEMPLATE
     * @type String
     * @protected
     * @static
@@ -1429,7 +1455,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
    /**
     * A template for the row of weekday names.
-    * @property CalendarBase.WEEKDAY_ROW_TEMPLATE
+    * @property WEEKDAY_ROW_TEMPLATE
     * @type String
     * @protected
     * @static
@@ -1440,7 +1466,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
    /**
     * A template for a single row of calendar days.
-    * @property CalendarBase.CALDAY_ROW_TEMPLATE
+    * @property CALDAY_ROW_TEMPLATE
     * @type String
     * @protected
     * @static
@@ -1451,7 +1477,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
    /**
     * A template for a single cell with a weekday name.
-    * @property CalendarBase.CALDAY_ROW_TEMPLATE
+    * @property CALDAY_ROW_TEMPLATE
     * @type String
     * @protected
     * @static
@@ -1460,7 +1486,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 
    /**
     * A template for a single cell with a calendar day.
-    * @property CalendarBase.CALDAY_TEMPLATE
+    * @property CALDAY_TEMPLATE
     * @type String
     * @protected
     * @static
@@ -1472,7 +1498,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
    /**
     * The identity of the widget.
     *
-    * @property CalendarBase.NAME
+    * @property NAME
     * @type String
     * @default 'calendarBase'
     * @readOnly
@@ -1485,7 +1511,7 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
     * Static property used to define the default attribute configuration of
     * the Widget.
     *
-    * @property CalendarBase.ATTRS
+    * @property ATTRS
     * @type {Object}
     * @protected
     * @static
@@ -1499,7 +1525,8 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
      *
      * @attribute date
      * @type Date
-     * @default Today's date as set on the user's computer.
+     * @default The first of the month containing today's date, as
+     * set on the end user's system.
      */
     date: {
       value: new Date(),
@@ -1621,4 +1648,4 @@ Y.CalendarBase = Y.extend( CalendarBase, Y.Widget, {
 });
 
 
-}, '3.4.0' ,{lang:['en', 'ru'], requires:['widget', 'substitute', 'datatype-date', 'datatype-date-math', 'cssgrids']});
+}, '3.4.0' ,{requires:['widget', 'substitute', 'datatype-date', 'datatype-date-math', 'cssgrids'], lang:['en', 'ja', 'ru']});

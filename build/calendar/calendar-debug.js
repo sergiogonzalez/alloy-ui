@@ -164,12 +164,31 @@ Y.Calendar = Y.extend(Calendar, Y.CalendarBase, {
         }
 
       if (clickedCellIsDay) {
+   /**
+     * Fired when a specific date cell in the calendar is clicked. The event carries a 
+     * payload which includes a `cell` property corresponding to the node of the actual
+     * date cell, and a `date` property, with the `Date` that was clicked.
+     *
+     * @event dateClick
+     */
         this.fire("dateClick", {cell: clickedCell, date: this._nodeToDate(clickedCell)});
       }
       else if (clickedCell.hasClass(CAL_PREVMONTH_DAY)) {
+   /**
+     * Fired when any of the previous month's days displayed before the calendar grid
+     * are clicked.
+     *
+     * @event prevMonthClick
+     */
         this.fire("prevMonthClick");
       }
       else if (clickedCell.hasClass(CAL_NEXTMONTH_DAY)) {
+   /**
+     * Fired when any of the next month's days displayed after the calendar grid
+     * are clicked.
+     *
+     * @event nextMonthClick
+     */
         this.fire("nextMonthClick");
       }
     },
@@ -208,14 +227,14 @@ Y.Calendar = Y.extend(Calendar, Y.CalendarBase, {
   addYear : function (e) {
     this.set("date", ydate.addYears(this.get("date"), 1));
     e.halt();
-  },  
+  }
 },
 
 {
    /**
     * The identity of the widget.
     *
-    * @property Calendar.NAME
+    * @property NAME
     * @type String
     * @default 'Calendar'
     * @readOnly
@@ -228,7 +247,7 @@ Y.Calendar = Y.extend(Calendar, Y.CalendarBase, {
     * Static property used to define the default attribute configuration of
     * the Widget.
     *
-    * @property Calendar.ATTRS
+    * @property ATTRS
     * @type {Object}
     * @protected
     * @static
@@ -342,4 +361,4 @@ Y.Calendar = Y.extend(Calendar, Y.CalendarBase, {
 });
 
 
-}, '3.4.0' ,{lang:['en', 'ru'], requires:['calendar-base', 'calendarnavigator']});
+}, '3.4.0' ,{requires:['calendar-base', 'calendarnavigator'], lang:['en', 'ja', 'ru']});

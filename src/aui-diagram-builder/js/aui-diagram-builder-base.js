@@ -6,15 +6,15 @@ var Lang = A.Lang,
 	isString = Lang.isString,
 
 	isArrayList = function(val) {
-		return (val instanceof A.ArrayList);
+		return A.instanceOf(val, A.ArrayList);
 	},
 
 	isNode = function(val) {
-		return (val instanceof A.Node);
+		return A.instanceOf(val, A.Node);
 	},
 
 	isAvailableField = function(val) {
-		return (val instanceof A.AvailableField);
+		return A.instanceOf(val, A.AvailableField);
 	},
 
 	AArray = A.Array,
@@ -66,6 +66,7 @@ var Lang = A.Lang,
 	TAB_VIEW = 'tabView',
 	TABS = 'tabs',
 	TABVIEW = 'tabview',
+	TITLE = 'title',
 	TOOLBAR = 'toolbar',
 	TOOLBAR_CONTAINER = 'toolbarContainer',
 
@@ -162,7 +163,7 @@ var AvailableField = A.Component.create({
 	getAvailableFieldByNode: function(node) {
 		var node = A.one(node);
 
-		if (isNode(A.one(node))) {
+		if (isNode(node)) {
 			return node.getData(AVAILABLE_FIELD)
 		}
 
@@ -243,6 +244,7 @@ var AvailableField = A.Component.create({
 		_uiSetLabel: function(val) {
 			var instance = this;
 
+			instance.get(NODE).attr(TITLE, val);
 			instance.labelNode.setContent(val);
 		}
 	}
