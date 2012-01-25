@@ -14,12 +14,20 @@ var Lang = A.Lang,
 	isValue = Lang.isValue,
 
 	AArray = A.Array,
+	Node = A.Node,
+	NodeList = A.NodeList,
 
 	getClassName = A.getClassName,
+	getRegExp = A.DOM._getRegExp,
+
+	prefix = Lang.String.prefix,
 
 	CONFIG = A.config,
+	DOC = CONFIG.doc,
+	WIN = CONFIG.win,
 
-	NODE_PROTOTYPE = A.Node.prototype,
+	NODE_PROTO = Node.prototype,
+	NODELIST_PROTO = NodeList.prototype,
 
 	STR_EMPTY = '',
 
@@ -64,13 +72,21 @@ var Lang = A.Lang,
 		l: 'paddingLeft',
 		r: 'paddingRight',
 		t: 'paddingTop'
+	},
+
+	prefixSelector = function(ns, id) {
+		return '#' + prefix(ns, id);
+	},
+
+	formatSelectorNS = function(ns, selector) {
+		return selector.replace(getRegExp('(#|\\[id=(\\\"|\\\'))(?!' + ns + ')', 'g'), '$1' + ns);
 	};
 
 	/*
 		Parts of this file are used from jQuery (http://jquery.com)
 		Dual-licensed under MIT/GPL
 	*/
-	var div = document.createElement('div');
+	var div = DOC.createElement('div');
 
 	div.style.display = 'none';
 	div.innerHTML = '   <table></table>&nbsp;';
@@ -96,6 +112,10 @@ var Lang = A.Lang,
 
 	div = null;
 
+	Node.cssId = prefixSelector;
+
+	Node.formatSelectorNS = formatSelectorNS;
+
 /**
  * Augment the <a href="Node.html">YUI3 Node</a> with more util methods.
  *
@@ -106,7 +126,13 @@ var Lang = A.Lang,
  * @constructor
  * @uses Node
  */
-A.mix(NODE_PROTOTYPE, {
+A.mix(NODE_PROTO, {
+	allNS: function(ns, selector) {
+		var instance = this;
+
+		return instance.all(formatSelectorNS(ns, selector));
+	},
+
 	/**
 	 * <p>Returns the current ancestors of the node element. If a selector is
 	 * specified, the ancestors are filtered to match the selector.</p>
@@ -281,7 +307,7 @@ A.mix(NODE_PROTOTYPE, {
 
 					outerHTML = outerHTML.replace(REGEX_IE8_ACTION, '="$1">').replace(REGEX_LEADING_WHITE_SPACE, STR_EMPTY);
 
-					clone = A.Node.create(outerHTML);
+					clone = Node.create(outerHTML);
 				}
 				else {
 					clone = A.one(el.cloneNode());
@@ -301,7 +327,7 @@ A.mix(NODE_PROTOTYPE, {
 
 	/**
 	 * <p>Centralize the current Node instance with the passed
-     * <code>centerWith</code> Node, if not specified, the body will be
+     * <code>val</code> Array, Node, String, or Region, if not specified, the body will be
      * used.</p>
      *
      * Example:
@@ -313,20 +339,33 @@ A.mix(NODE_PROTOTYPE, {
 	 *
 	 * @method center
 	 * @chainable
-	 * @param {Node | String} centerWith Node to center with
+	 * @param {Array | Node | Region | String} val Array, Node, String, or Region to center with
 	 */
-	center: function(centerWith) {
-		var instance = this;
+	center: function(val) {
+		var instance = this,
+			nodeRegion = instance.get(REGION),
+			x,
+			y;
 
-		centerWith = (centerWith && A.one(centerWith)) || A.getBody();
+		if (isArray(val)) {
+			x = val[0];
+			y = val[1];
+		}
+		else {
+			var region;
 
-		var centerWithRegion = centerWith.get(REGION);
-		var nodeRegion = instance.get(REGION);
+			if (isObject(val) && !A.instanceOf(val, A.Node)) {
+				region = val;
+			}
+			else {
+				region = (A.one(val) || A.getBody()).get(REGION);
+			}
 
-		var xCenterWith = centerWithRegion.left + (centerWithRegion.width / 2);
-		var yCenterWith = centerWithRegion.top + (centerWithRegion.height / 2);
+			x = region.left + (region.width / 2);
+			y = region.top + (region.height / 2);
+		}
 
-		instance.setXY([xCenterWith - (nodeRegion.width / 2), yCenterWith - (nodeRegion.height / 2)]);
+		instance.setXY([x - (nodeRegion.width / 2), y - (nodeRegion.height / 2)]);
 	},
 
 	/**
@@ -349,7 +388,7 @@ A.mix(NODE_PROTOTYPE, {
 
 		instance.all('>*').remove().purge();
 
-		var el = A.Node.getDOMNode(instance);
+		var el = Node.getDOMNode(instance);
 
 		while (el.firstChild) {
 			el.removeChild(el.firstChild);
@@ -368,7 +407,7 @@ A.mix(NODE_PROTOTYPE, {
 	getDOM: function() {
 		var instance = this;
 
-		return A.Node.getDOMNode(instance);
+		return Node.getDOMNode(instance);
 	},
 
 	/**
@@ -386,7 +425,7 @@ A.mix(NODE_PROTOTYPE, {
 	},
 
 	/**
-	 * Gets the current center position of the node in page coordinates. 
+	 * Gets the current center position of the node in page coordinates.
 	 * @method getCenterXY
 	 * @for Node
 	 * @return {Array} The XY position of the node
@@ -518,6 +557,12 @@ A.mix(NODE_PROTOTYPE, {
 		return this;
 	},
 
+	oneNS: function(ns, selector) {
+		var instance = this;
+
+		return instance.one(formatSelectorNS(ns, selector));
+	},
+
 	/**
 	 * Gets the outerHTML of a node, which islike innerHTML, except that it
 	 * actually contains the HTML of the node itself.
@@ -533,7 +578,7 @@ A.mix(NODE_PROTOTYPE, {
 			return domEl.outerHTML;
 		}
 
-		var temp = A.Node.create('<div></div>').append(
+		var temp = Node.create('<div></div>').append(
 			this.clone()
 		);
 
@@ -624,9 +669,26 @@ A.mix(NODE_PROTOTYPE, {
 	radioClass: function(cssClass) {
 		var instance = this;
 
-		instance.siblings().removeClass(cssClass);
+		var siblings = instance.siblings();
 
-		instance.addClass(cssClass);
+		if (isString(cssClass)) {
+			siblings.removeClass(cssClass);
+
+			instance.addClass(cssClass);
+		}
+		else if (isArray(cssClass)) {
+			var siblingNodes = siblings.getDOM();
+
+			var regex = getRegExp('(?:^|\\s+)(?:' + cssClass.join('|') + ')(?=\\s+|$)', 'g');
+			var node;
+
+			for (var i = siblingNodes.length - 1; i >= 0; i--) {
+				node = siblingNodes[i];
+				node.className = node.className.replace(regex, '');
+			}
+
+			instance.addClass(cssClass.join(' '));
+		}
 
 		return instance;
 	},
@@ -634,7 +696,7 @@ A.mix(NODE_PROTOTYPE, {
 	/**
 	 * Generate an unique identifier and reset the id attribute of the node
      * instance using the new value. Invokes the
-     * <a href="A.Node.html#method_guid">guid</a>.
+     * <a href="Node.html#method_guid">guid</a>.
 	 *
 	 * @method resetId
 	 * @chainable
@@ -683,7 +745,7 @@ A.mix(NODE_PROTOTYPE, {
 				textField.select();
 			}
 
-			if (textField != document.activeElement) {
+			if (textField != DOC.activeElement) {
 				textField.focus();
 			}
 		}
@@ -1008,7 +1070,7 @@ A.mix(NODE_PROTOTYPE, {
 
 		if (parent) {
 			if (isString(newNode)) {
-				newNode = A.Node.create(newNode);
+				newNode = Node.create(newNode);
 			}
 
 			parent.insertBefore(newNode, refNode);
@@ -1027,14 +1089,14 @@ A.mix(NODE_PROTOTYPE, {
 	}
 }, true);
 
-NODE_PROTOTYPE.__show = NODE_PROTOTYPE._show;
-NODE_PROTOTYPE.__hide = NODE_PROTOTYPE._hide;
-NODE_PROTOTYPE.__isHidden = NODE_PROTOTYPE._isHidden;
+NODE_PROTO.__show = NODE_PROTO._show;
+NODE_PROTO.__hide = NODE_PROTO._hide;
+NODE_PROTO.__isHidden = NODE_PROTO._isHidden;
 
-NODE_PROTOTYPE._isHidden = function() {
+NODE_PROTO._isHidden = function() {
 	var instance = this;
 
-	return NODE_PROTOTYPE.__isHidden.call(instance) || instance.hasClass(instance._hideClass || CSS_HELPER_HIDDEN);
+	return NODE_PROTO.__isHidden.call(instance) || instance.hasClass(instance._hideClass || CSS_HELPER_HIDDEN);
 };
 /**
  * <p>Hide the node adding a css class on it. If <code>cssClass</code> is not
@@ -1049,7 +1111,7 @@ NODE_PROTOTYPE._isHidden = function() {
  * @chainable
  * @param {string} cssClass Class name to hide the element. Optional.
  */
-NODE_PROTOTYPE._hide = function() {
+NODE_PROTO._hide = function() {
 	var instance = this;
 
 	instance.addClass(instance._hideClass || CSS_HELPER_HIDDEN);
@@ -1071,7 +1133,7 @@ NODE_PROTOTYPE._hide = function() {
  * @chainable
  * @param {string} cssClass Class name to hide the element. Optional.
  */
-NODE_PROTOTYPE._show = function() {
+NODE_PROTO._show = function() {
 	var instance = this;
 
 	instance.removeClass(instance._hideClass || CSS_HELPER_HIDDEN);
@@ -1176,7 +1238,7 @@ A.each(
 
 		var dimensionType = item.toLowerCase();
 
-		NODE_PROTOTYPE[dimensionType] = function(size) {
+		NODE_PROTO[dimensionType] = function(size) {
 			var instance = this;
 
 			var returnValue = instance;
@@ -1218,13 +1280,13 @@ A.each(
 			return returnValue;
 		};
 
-		NODE_PROTOTYPE[INNER + item] = function() {
+		NODE_PROTO[INNER + item] = function() {
 			var instance = this;
 
 			return instance[dimensionType]() + instance.getPadding(sides);
 		};
 
-		NODE_PROTOTYPE[OUTER + item] = function(margin) {
+		NODE_PROTO[OUTER + item] = function(margin) {
 			var instance = this;
 
 			var innerSize = instance[INNER + item]();
@@ -1290,8 +1352,8 @@ if (!SUPPORT_OPTIONAL_TBODY) {
  * @constructor
  * @uses A.Node
  */
-A.NodeList.importMethod(
-	NODE_PROTOTYPE,
+NodeList.importMethod(
+	NODE_PROTO,
 	[
 		'after',
 
@@ -1337,8 +1399,6 @@ A.NodeList.importMethod(
 	]
 );
 
-var NODELIST_PROTO = A.NodeList.prototype;
-
 A.mix(
 	NODELIST_PROTO,
 	{
@@ -1369,6 +1429,12 @@ A.mix(
 			return A.all(newNodeList);
 		},
 
+		allNS: function(ns, selector) {
+			var instance = this;
+
+			return instance.all(formatSelectorNS(ns, selector));
+		},
+
 		/**
 		 * Returns the first element in the node list collection.
 		 *
@@ -1389,7 +1455,7 @@ A.mix(
 		getDOM: function() {
 			var instance = this;
 
-			return A.NodeList.getDOMNodes(this);
+			return NodeList.getDOMNodes(this);
 		},
 
 		/**
@@ -1428,6 +1494,12 @@ A.mix(
 			}
 
 			return newNode;
+		},
+
+		oneNS: function(ns, selector) {
+			var instance = this;
+
+			return instance.one(formatSelectorNS(ns, selector));
 		}
 	}
 );
@@ -1460,7 +1532,7 @@ NODELIST_PROTO.filter = function(value, context) {
 };
 
 A.mix(
-	A.NodeList,
+	NodeList,
 	{
 		create: function(html) {
 			var docFrag = A.getDoc().invoke(CREATE_DOCUMENT_FRAGMENT);
@@ -1482,7 +1554,7 @@ A.mix(
 			var instance = this;
 
 			if (!instance._bodyNode) {
-				instance._bodyNode = A.one(CONFIG.doc.body);
+				instance._bodyNode = A.one(DOC.body);
 			}
 
 			return instance._bodyNode;
@@ -1497,7 +1569,7 @@ A.mix(
 			var instance = this;
 
 			if (!instance._documentNode) {
-				instance._documentNode = A.one(CONFIG.doc);
+				instance._documentNode = A.one(DOC);
 			}
 
 			return instance._documentNode;
@@ -1512,10 +1584,40 @@ A.mix(
 			var instance = this;
 
 			if (!instance._windowNode) {
-				instance._windowNode = A.one(CONFIG.win);
+				instance._windowNode = A.one(WIN);
 			}
 
 			return instance._windowNode;
 		}
+	}
+);
+
+A.queryNS = function(ns, selector, methodName) {
+	return A[methodName || 'one'](formatSelectorNS(ns, selector));
+};
+
+A.oneNS = A.queryNS;
+
+A.allNS = function(ns, selector) {
+	return A.queryNS(ns, selector, 'all');
+}
+
+A.byIdNS = function(ns, id) {
+	return A.one(prefixSelector(ns, id));
+};
+
+// Patch for http://yuilibrary.com/projects/yui3/ticket/2531537
+
+var addMethod = NodeList.addMethod;
+
+AArray.each(
+	['hide', 'show'],
+	function(item, index, collection) {
+		addMethod(
+			item,
+			function() {
+				return this[item].apply(this, arguments);
+			}
+		);
 	}
 );

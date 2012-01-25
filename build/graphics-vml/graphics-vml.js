@@ -25,7 +25,10 @@ var Y_LANG = Y.Lang,
 function VMLDrawing() {}
 
 /**
- * Set of drawing methods for VML based classes.
+ * <a href="http://www.w3.org/TR/NOTE-VML">VML</a> implementation of the <a href="Drawing.html">`Drawing`</a> class. 
+ * `VMLDrawing` is not intended to be used directly. Instead, use the <a href="Drawing.html">`Drawing`</a> class. 
+ * If the browser lacks <a href="http://www.w3.org/TR/SVG/">SVG</a> and <a href="http://www.w3.org/TR/html5/the-canvas-element.html">Canvas</a> 
+ * capabilities, the <a href="Drawing.html">`Drawing`</a> class will point to the `VMLDrawing` class.
  *
  * @module graphics
  * @class VMLDrawing
@@ -157,7 +160,11 @@ VMLDrawing.prototype = {
     drawWedge: function(x, y, startAngle, arc, radius, yRadius)
     {
         var diameter = radius * 2;
+        x = Math.round(x);
+        y = Math.round(y);
         yRadius = yRadius || radius;
+        radius = Math.round(radius);
+        yRadius = Math.round(yRadius);
         if(Math.abs(arc) > 360)
         {
             arc = 360;
@@ -233,7 +240,6 @@ VMLDrawing.prototype = {
             h = this.get("height"),
             path = this._path,
             pathEnd = "";
-        node.style.visible = "hidden";
         this._fillChangeHandler();
         this._strokeChangeHandler();
         if(path)
@@ -259,7 +265,6 @@ VMLDrawing.prototype = {
             node.style.height = h + "px";
         }
         this._path = path;
-        node.style.visible = "visible";
         this._updateTransform();
     },
 
@@ -325,7 +330,10 @@ VMLDrawing.prototype = {
 };
 Y.VMLDrawing = VMLDrawing;
 /**
- * Base class for creating shapes.
+ * <a href="http://www.w3.org/TR/NOTE-VML">VML</a> implementation of the <a href="Shape.html">`Shape`</a> class. 
+ * `VMLShape` is not intended to be used directly. Instead, use the <a href="Shape.html">`Shape`</a> class. 
+ * If the browser lacks <a href="http://www.w3.org/TR/SVG/">SVG</a> and <a href="http://www.w3.org/TR/html5/the-canvas-element.html">Canvas</a> 
+ * capabilities, the <a href="Shape.html">`Shape`</a> class will point to the `VMLShape` class.
  *
  * @module graphics
  * @class VMLShape
@@ -347,8 +355,8 @@ Y.extend(VMLShape, Y.BaseGraphic, Y.mix({
 	 * Indicates the type of shape
 	 *
 	 * @property _type
-	 * @readOnly
 	 * @type String
+     * @private
 	 */
 	_type: "shape",
     
@@ -880,6 +888,7 @@ Y.extend(VMLShape, Y.BaseGraphic, Y.mix({
      * @method _getGradientFill
      * @param {Object} fill Object containing fill properties.
      * @return Object
+     * @private
      */
 	_getGradientFill: function(fill)
 	{
@@ -1130,7 +1139,7 @@ Y.extend(VMLShape, Y.BaseGraphic, Y.mix({
 	 * use the `translate` method.
 	 *
 	 * @method translateX
-	 * @param {Number} y The value to translate.
+	 * @param {Number} x The value to translate.
 	 */
 	translateX: function(x)
     {
@@ -1269,7 +1278,6 @@ Y.extend(VMLShape, Y.BaseGraphic, Y.mix({
 	 *
 	 * @method _createGraphicNode
 	 * @param {String} type node type to create
-	 * @param {String} specified pointer-events value
 	 * @return HTMLElement
 	 * @private
 	 */
@@ -1314,9 +1322,15 @@ Y.extend(VMLShape, Y.BaseGraphic, Y.mix({
 		};
 	},
 
-	/**
-	 * @private
-	 */
+    /**
+     * Sets the value of an attribute.
+     *
+     * @method set
+     * @param {String|Object} name The name of the attribute. Alternatively, an object of key value pairs can 
+     * be passed in to set multiple attributes at once.
+     * @param {Any} value The value to set the attribute to. This value is ignored if an object is received as 
+     * the name param.
+     */
 	set: function() 
 	{
 		var host = this;
@@ -1458,8 +1472,21 @@ VMLShape.ATTRS = {
 	transform: {
 		setter: function(val)
 		{
+            var i = 0,
+                len,
+                transform;
+            this._rotation = 0;
             this.matrix.init();	
 		    this._transforms = this.matrix.getTransformArray(val);
+            len = this._transforms.length;
+            for(;i < len; ++i)
+            {
+                transform = this._transforms[i];
+                if(transform[0] == "rotate")  
+                {
+                    this._rotation += transform[1];
+                }
+            }
             this._transform = val;
             if(this.initialized)
             {
@@ -1668,9 +1695,18 @@ VMLShape.ATTRS = {
 		{
 			var i,
 				stroke,
+                wt,
 				tmpl = this.get("stroke") || this._getDefaultStroke();
 			if(val)
 			{
+                if(val.hasOwnProperty("weight"))
+                {
+                    wt = parseInt(val.weight, 10);
+                    if(!isNaN(wt))
+                    {
+                        val.weight = wt;
+                    }
+                }
 				for(i in val)
 				{
 					if(val.hasOwnProperty(i))
@@ -1685,22 +1721,17 @@ VMLShape.ATTRS = {
 		}
 	},
 	
-	/**
-	 * Indicates whether or not the instance will size itself based on its contents.
-	 *
-	 * @config autoSize 
-	 * @type Boolean
-	 */
-	autoSize: {
+	//Not used. Remove in future.
+    autoSize: {
 		value: false
 	},
 
-	/**
-	 * Determines whether the instance will receive mouse events.
-	 * 
-	 * @config pointerEvents
-	 * @type string
-	 */
+	// Only implemented in SVG
+	// Determines whether the instance will receive mouse events.
+	// 
+	// @config pointerEvents
+	// @type string
+	//
 	pointerEvents: {
 		value: "visiblePainted"
 	},
@@ -1738,9 +1769,12 @@ VMLShape.ATTRS = {
 };
 Y.VMLShape = VMLShape;
 /**
- * The VMLPath class creates a graphic object with editable 
- * properties.
+ * <a href="http://www.w3.org/TR/NOTE-VML">VML</a> implementation of the <a href="Path.html">`Path`</a> class. 
+ * `VMLPath` is not intended to be used directly. Instead, use the <a href="Path.html">`Path`</a> class. 
+ * If the browser lacks <a href="http://www.w3.org/TR/SVG/">SVG</a> and <a href="http://www.w3.org/TR/html5/the-canvas-element.html">Canvas</a> 
+ * capabilities, the <a href="Path.html">`Path`</a> class will point to the `VMLPath` class.
  *
+ * @module graphics
  * @class VMLPath
  * @extends VMLShape
  */
@@ -1809,6 +1843,7 @@ VMLPath.ATTRS = Y.merge(Y.VMLShape.ATTRS, {
 	 *
 	 * @config path
 	 * @type String
+     * @readOnly
 	 */
 	path: {
 		readOnly: true,
@@ -1821,7 +1856,10 @@ VMLPath.ATTRS = Y.merge(Y.VMLShape.ATTRS, {
 });
 Y.VMLPath = VMLPath;
 /**
- * Draws rectangles
+ * <a href="http://www.w3.org/TR/NOTE-VML">VML</a> implementation of the <a href="Rect.html">`Rect`</a> class. 
+ * `VMLRect` is not intended to be used directly. Instead, use the <a href="Rect.html">`Rect`</a> class. 
+ * If the browser lacks <a href="http://www.w3.org/TR/SVG/">SVG</a> and <a href="http://www.w3.org/TR/html5/the-canvas-element.html">Canvas</a> 
+ * capabilities, the <a href="Rect.html">`Rect`</a> class will point to the `VMLRect` class.
  *
  * @module graphics
  * @class VMLRect
@@ -1837,15 +1875,18 @@ Y.extend(VMLRect, Y.VMLShape, {
 	 * Indicates the type of shape
 	 *
 	 * @property _type
-	 * @readOnly
 	 * @type String
+     * @private
 	 */
 	_type: "rect"
 });
 VMLRect.ATTRS = Y.VMLShape.ATTRS;
 Y.VMLRect = VMLRect;
 /**
- * Draws an ellipse
+ * <a href="http://www.w3.org/TR/NOTE-VML">VML</a> implementation of the <a href="Ellipse.html">`Ellipse`</a> class. 
+ * `VMLEllipse` is not intended to be used directly. Instead, use the <a href="Ellipse.html">`Ellipse`</a> class. 
+ * If the browser lacks <a href="http://www.w3.org/TR/SVG/">SVG</a> and <a href="http://www.w3.org/TR/html5/the-canvas-element.html">Canvas</a> 
+ * capabilities, the <a href="Ellipse.html">`Ellipse`</a> class will point to the `VMLEllipse` class.
  *
  * @module graphics
  * @class VMLEllipse
@@ -1863,18 +1904,20 @@ Y.extend(VMLEllipse, Y.VMLShape, {
 	 * Indicates the type of shape
 	 *
 	 * @property _type
-	 * @readOnly
 	 * @type String
+     * @private
 	 */
 	_type: "oval"
 });
 VMLEllipse.ATTRS = Y.merge(Y.VMLShape.ATTRS, {
-	/**
-	 * Horizontal radius for the ellipse.
-	 *
-	 * @config xRadius
-	 * @type Number
-	 */
+	//
+	// Horizontal radius for the ellipse. This attribute is not implemented in Canvas.
+    // Will add in 3.4.1.
+	//
+	// @config xRadius
+	// @type Number
+	// @readOnly
+	//
 	xRadius: {
 		lazyAdd: false,
 
@@ -1893,12 +1936,14 @@ VMLEllipse.ATTRS = Y.merge(Y.VMLShape.ATTRS, {
 		}
 	},
 
-	/**
-	 * Vertical radius for the ellipse.
-	 *
-	 * @config yRadius
-	 * @type Number
-	 */
+	//
+	// Vertical radius for the ellipse. This attribute is not implemented in Canvas. 
+    // Will add in 3.4.1.
+	//
+	// @config yRadius
+	// @type Number
+	// @readOnly
+	//
 	yRadius: {
 		lazyAdd: false,
 		
@@ -1919,7 +1964,10 @@ VMLEllipse.ATTRS = Y.merge(Y.VMLShape.ATTRS, {
 });
 Y.VMLEllipse = VMLEllipse;
 /**
- * Draws a circle
+ * <a href="http://www.w3.org/TR/NOTE-VML">VML</a> implementation of the <a href="Circle.html">`Circle`</a> class. 
+ * `VMLCircle` is not intended to be used directly. Instead, use the <a href="Circle.html">`Circle`</a> class. 
+ * If the browser lacks <a href="http://www.w3.org/TR/SVG/">SVG</a> and <a href="http://www.w3.org/TR/html5/the-canvas-element.html">Canvas</a> 
+ * capabilities, the <a href="Circle.html">`Circle`</a> class will point to the `VMLCircle` class.
  *
  * @module graphics
  * @class VMLCircle
@@ -1937,8 +1985,8 @@ Y.extend(VMLCircle, VMLShape, {
 	 * Indicates the type of shape
 	 *
 	 * @property _type
-	 * @readOnly
 	 * @type String
+     * @private
 	 */
 	_type: "oval"
 });
@@ -1957,7 +2005,7 @@ VMLCircle.ATTRS = Y.merge(VMLShape.ATTRS, {
 	},
 
 	/**
-	 * Width of the circle
+	 * Indicates the width of the shape
 	 *
 	 * @config width
 	 * @type Number
@@ -1978,9 +2026,9 @@ VMLCircle.ATTRS = Y.merge(VMLShape.ATTRS, {
 	},
 
 	/**
-	 * Width of the circle
+	 * Indicates the height of the shape
 	 *
-	 * @config width
+	 * @config height
 	 * @type Number
 	 */
 	height: {
@@ -2016,8 +2064,8 @@ Y.extend(VMLPieSlice, Y.VMLShape, Y.mix({
      * Indicates the type of shape
      *
      * @property _type
-     * @readOnly
      * @type String
+     * @private
      */
     _type: "shape",
 
@@ -2079,8 +2127,12 @@ VMLPieSlice.ATTRS = Y.mix({
 }, Y.VMLShape.ATTRS);
 Y.VMLPieSlice = VMLPieSlice;
 /**
- * VMLGraphic is a simple drawing api that allows for basic drawing operations.
+ * <a href="http://www.w3.org/TR/NOTE-VML">VML</a> implementation of the <a href="Graphic.html">`Graphic`</a> class. 
+ * `VMLGraphic` is not intended to be used directly. Instead, use the <a href="Graphic.html">`Graphic`</a> class. 
+ * If the browser lacks <a href="http://www.w3.org/TR/SVG/">SVG</a> and <a href="http://www.w3.org/TR/html5/the-canvas-element.html">Canvas</a> 
+ * capabilities, the <a href="Graphic.html">`Graphic`</a> class will point to the `VMLGraphic` class.
  *
+ * @module graphics
  * @class VMLGraphic
  * @constructor
  */
@@ -2405,7 +2457,6 @@ Y.extend(VMLGraphic, Y.BaseGraphic, {
      * Generates a shape instance by type.
      *
      * @method addShape
-     * @param {String} type type of shape to generate.
      * @param {Object} cfg attributes for the shape
      * @return Shape
      */
@@ -2678,7 +2729,8 @@ Y.extend(VMLGraphic, Y.BaseGraphic, {
      * Adds a shape to the redraw queue and calculates the contentBounds. 
      *
      * @method addToRedrawQueue
-     * @param shape {SVGShape}
+     * @param shape {VMLShape}
+     * @protected
      */
     addToRedrawQueue: function(shape)
     {

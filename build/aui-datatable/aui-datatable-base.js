@@ -22,9 +22,6 @@ A.DataTable.Base = A.Base.create('datatable', A.DataTable.Base, [], {
 	initializer: function() {
 		var instance = this;
 
-		instance._bindRecordsetRecordChange();
-
-		instance.after(RECORDSET_CHANGE, instance._afterRecordsetChangeExt);
 		instance.after(instance._uiSetRecordsetExt, instance, '_uiSetRecordset');
 	},
 
@@ -46,24 +43,6 @@ A.DataTable.Base = A.Base.create('datatable', A.DataTable.Base, [], {
 		return A.one(_HASH+record.get(ID));
 	},
 
-	_afterRecordsetChangeExt: function(event) {
-		var instance = this;
-
-		instance._bindRecordsetRecordChange();
-	},
-
-	_afterRecordsetRecordChange: function(event) {
-	    var instance = this;
-
-		instance._uiSetRecordset(instance.get(RECORDSET));
-	},
-
-	_bindRecordsetRecordChange: function(event){
-		var instance = this;
-
-		instance.get(RECORDSET).after(CHANGE, A.bind(instance._afterRecordsetRecordChange, instance));
-	},
-
 	_fixPluginsUI: function() {
 		var instance = this;
 		var sort = instance.sort;
@@ -71,10 +50,6 @@ A.DataTable.Base = A.Base.create('datatable', A.DataTable.Base, [], {
 
 		if (sort && scroll) {
 			scroll.syncUI();
-
-			// Workaround: Invoke _syncWidths twice from DataTableScroll, otherwise it's misscalculating the paddings for the sortable columns.
-			// TODO: Fix this on DataTable DataTableScroll
-			scroll._syncWidths();
 		}
 	},
 
@@ -163,19 +138,20 @@ A.Recordset = A.Base.create('recordset', A.Recordset, [], {
 	}
 }, {});
 
-// A.Plugin.DataTableScroll _syncWidths YUI implementation breaks when recordset is empty.
-A.Plugin.DataTableScroll = A.Base.create("dataTableScroll", A.Plugin.DataTableScroll, [], {
-	_syncWidths: function() {
-		try {
-			A.Plugin.DataTableScroll.superclass._syncWidths.apply(this, arguments);
-		}
-		catch(e) {
-		}
-	}
-},
-{
-    NS: "scroll",
-    NAME: "dataTableScroll"
-});
+A.Plugin.RecordsetSort.prototype._defSortFn = function(event) {
+	var instance = this;
 
-}, '@VERSION@' ,{requires:['aui-base','datatable','plugin']});
+	var host = instance.get("host");
+	var items = host._items;
+
+    A.Array.stableSort(
+    	items,
+        function (a, b) {
+            return event.sorter.call(items, a, b, event.field, event.desc);
+        }
+    );
+
+    instance.set('lastSortProperties', event);
+};
+
+}, '@VERSION@' ,{skinnable:true, requires:['aui-base','datatable','plugin']});

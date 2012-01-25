@@ -3,6 +3,8 @@ var Lang = A.Lang,
 
 	getClassName = A.getClassName,
 
+	DOC = A.config.doc,
+
 	NAME = 'textarea',
 
 	CSS_TEXTAREA = getClassName(NAME),
@@ -165,7 +167,7 @@ var Textarea = A.Component.create(
 				var maxHeight = instance._maxHeight;
 
 				var content = node.val();
-				var textNode = document.createTextNode(content);
+				var textNode = DOC.createTextNode(content);
 
 				heightMonitor.set('innerHTML', '');
 
@@ -226,4 +228,4 @@ var Textarea = A.Component.create(
 
 A.Textarea = Textarea;
 
-}, '@VERSION@' ,{requires:['aui-form-textfield'], skinnable:true});
+}, '@VERSION@' ,{skinnable:true, requires:['aui-form-textfield']});

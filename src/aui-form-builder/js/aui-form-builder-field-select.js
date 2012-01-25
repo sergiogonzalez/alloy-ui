@@ -58,7 +58,7 @@ var FormBuilderSelectField = A.Component.create({
 
 	},
 
-	UI_ATTRS: A.FormBuilderField.UI_ATTRS.concat([MULTIPLE]),
+	UI_ATTRS: A.FormBuilderField.UI_ATTRS.concat([MULTIPLE, PREDEFINED_VALUE]),
 
 	CSS_PREFIX: CSS_FORM_BUILDER_FIELD,
 
@@ -69,7 +69,7 @@ var FormBuilderSelectField = A.Component.create({
 		getHTML: function() {
 			var instance = this;
 
-			return A.substitute(
+			return L.sub(
 				instance.get(TEMPLATE),
 				{
 					id: instance.get(ID),
@@ -113,6 +113,8 @@ var FormBuilderSelectField = A.Component.create({
 			else {
 				templateNode.removeAttribute(MULTIPLE);
 			}
+
+			instance.predefinedValueEditor.set(MULTIPLE, val);
 		}
 
 	}

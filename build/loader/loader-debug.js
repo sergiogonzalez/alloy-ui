@@ -20,7 +20,7 @@ if (!YUI.Env[Y.version]) {
             BUILD = '/build/',
             ROOT = VERSION + BUILD,
             CDN_BASE = Y.Env.base,
-            GALLERY_VERSION = 'gallery-2011.08.04-15-16',
+            GALLERY_VERSION = 'gallery-2011.09.14-20-40',
             TNT = '2in3',
             TNT_VERSION = '4',
             YUI2_VERSION = '2.9.0',
@@ -106,12 +106,13 @@ if (!YUI.Env[Y.version]) {
  * YUI files.
  *
  * @module loader
+ * @main loader
  * @submodule loader-base
  */
 
 var NOT_FOUND = {},
     NO_REQUIREMENTS = [],
-    MAX_URL_LENGTH = (Y.UA.ie) ? 2048 : 8192,
+    MAX_URL_LENGTH = 2048,
     GLOBAL_ENV = YUI.Env,
     GLOBAL_LOADED = GLOBAL_ENV._loaded,
     CSS = 'css',
@@ -139,10 +140,14 @@ var NOT_FOUND = {},
                         return path;
                     };
 
+if (YUI.Env.aliases) {
+    YUI.Env.aliases = {}; //Don't need aliases if Loader is present
+}
+
 /**
  * The component metadata is stored in Y.Env.meta.
  * Part of the loader module.
- * @property Env.meta
+ * @property meta
  * @for YUI
  */
 Y.Env.meta = META;
@@ -387,21 +392,12 @@ Y.Loader = function(o) {
     */
     self.comboSep = '&';
     /**
-     * Max url length for combo urls.  The default is 2048 for
-     * internet explorer, and 8192 otherwise.  This is the URL
+     * Max url length for combo urls.  The default is 2048. This is the URL
      * limit for the Yahoo! hosted combo servers.  If consuming
      * a different combo service that has a different URL limit
      * it is possible to override this default by supplying
      * the maxURLLength config option.  The config option will
      * only take effect if lower than the default.
-     *
-     * Browsers:
-     *    IE: 2048
-     *    Other A-Grade Browsers: Higher that what is typically supported
-     *    'capable' mobile browsers:
-     *
-     * Servers:
-     *    Apache: 8192
      *
      * @property maxURLLength
      * @type int
@@ -1001,8 +997,12 @@ Y.Loader.prototype = {
      */
     addModule: function(o, name) {
         name = name || o.name;
-
-        if (this.moduleInfo[name]) {
+        
+        //Only merge this data if the temp flag is set
+        //from an earlier pass from a pattern or else
+        //an override module (YUI_config) can not be used to
+        //replace a default module.
+        if (this.moduleInfo[name] && this.moduleInfo[name].temp) {
             //This catches temp modules loaded via a pattern
             // The module will be added twice, once from the pattern and
             // Once from the actual add call, this ensures that properties
@@ -1349,7 +1349,7 @@ Y.Loader.prototype = {
             r.unshift('intl');
             intl = true;
         }
-        o = mod.optional;
+        o = this.filterRequires(mod.optional);
 
         // Y.log("getRequires: " + name + " (dirty:" + this.dirty +
         // ", expanded:" + mod.expanded + ")");
@@ -1375,7 +1375,7 @@ Y.Loader.prototype = {
         }
 
         // get the requirements from superseded modules, if any
-        r = mod.supersedes;
+        r = this.filterRequires(mod.supersedes);
         if (r) {
             for (i = 0; i < r.length; i++) {
                 if (!hash[r[i]]) {
@@ -2181,9 +2181,13 @@ Y.log('Undefined module: ' + mname + ', matched a pattern: ' +
                         if (m && (m.type === type) && (m.combine || !m.ext)) {
 
                             frag = ((L.isValue(m.root)) ? m.root : self.root) + m.path;
-
-                            if ((url !== j) && (i < (len - 1)) &&
+                            frag = self._filter(frag, m.name);
+                            if ((url !== j) && (i <= (len - 1)) &&
                             ((frag.length + url.length) > self.maxURLLength)) {
+                                //Hack until this is rewritten to use an array and not string concat:
+                                if (url.substr(url.length - 1, 1) === self.comboSep) {
+                                    url = url.substr(0, (url.length - 1));
+                                }
                                 urls.push(self._filter(url));
                                 url = j;
                             }
@@ -2199,6 +2203,10 @@ Y.log('Undefined module: ' + mname + ', matched a pattern: ' +
                     }
 
                     if (combining.length && (url != j)) {
+                        //Hack until this is rewritten to use an array and not string concat:
+                        if (url.substr(url.length - 1, 1) === self.comboSep) {
+                            url = url.substr(0, (url.length - 1));
+                        }
                         urls.push(self._filter(url));
                     }
                 }
@@ -2364,7 +2372,12 @@ Y.log('attempting to load ' + s[i] + ', ' + self.base, 'info', 'loader');
     _filter: function(u, name) {
         var f = this.filter,
             hasFilter = name && (name in this.filters),
-            modFilter = hasFilter && this.filters[name];
+            modFilter = hasFilter && this.filters[name],
+	    groupName = this.moduleInfo[name] ? this.moduleInfo[name].group:null;		
+	    if (groupName && this.groups[groupName].filter) {		
+	 	   modFilter = this.groups[groupName].filter;
+		   hasFilter = true;		
+	     };
 
         if (u) {
             if (hasFilter) {
@@ -2657,9 +2670,21 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
             "view"
         ]
     }, 
-    "array-extras": {}, 
-    "array-invoke": {}, 
-    "arraylist": {}, 
+    "array-extras": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
+    "array-invoke": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
+    "arraylist": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
     "arraylist-add": {
         "requires": [
             "arraylist"
@@ -2854,6 +2879,7 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "calendar": {
         "lang": [
             "en", 
+            "ja", 
             "ru"
         ], 
         "requires": [
@@ -2865,6 +2891,7 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "calendar-base": {
         "lang": [
             "en", 
+            "ja", 
             "ru"
         ], 
         "requires": [
@@ -2879,7 +2906,10 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "calendarnavigator": {
         "requires": [
             "plugin", 
-            "classnamemanager"
+            "classnamemanager", 
+            "datatype-date", 
+            "node", 
+            "substitute"
         ], 
         "skinnable": true
     }, 
@@ -2918,7 +2948,8 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "console": {
         "lang": [
             "en", 
-            "es"
+            "es", 
+            "ja"
         ], 
         "requires": [
             "yui-log", 
@@ -2985,24 +3016,6 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "cssgrids": {
         "optional": [
             "cssreset", 
-            "cssfonts"
-        ], 
-        "type": "css"
-    }, 
-    "cssgrids-context-deprecated": {
-        "optional": [
-            "cssreset-context"
-        ], 
-        "requires": [
-            "cssfonts-context"
-        ], 
-        "type": "css"
-    }, 
-    "cssgrids-deprecated": {
-        "optional": [
-            "cssreset"
-        ], 
-        "requires": [
             "cssfonts"
         ], 
         "type": "css"
@@ -3151,8 +3164,7 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "datatable-scroll": {
         "requires": [
             "datatable-base", 
-            "plugin", 
-            "stylesheet"
+            "plugin"
         ]
     }, 
     "datatable-sort": {
@@ -3468,7 +3480,11 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
             "dom-style"
         ]
     }, 
-    "dump": {}, 
+    "dump": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
     "editor": {
         "use": [
             "frame", 
@@ -3516,7 +3532,11 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
             "editor-base"
         ]
     }, 
-    "escape": {}, 
+    "escape": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
     "event": {
         "after": [
             "node-base"
@@ -3631,7 +3651,8 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     }, 
     "event-resize": {
         "requires": [
-            "node-base"
+            "node-base", 
+            "event-synthetic"
         ]
     }, 
     "event-simulate": {
@@ -3775,6 +3796,7 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "highlight-base": {
         "requires": [
             "array-extras", 
+            "classnamemanager", 
             "escape", 
             "text-wordbreak"
         ]
@@ -3882,7 +3904,7 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "io-xdr": {
         "requires": [
             "io-base", 
-            "datatype-xml"
+            "datatype-xml-parse"
         ]
     }, 
     "json": {
@@ -3891,8 +3913,16 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
             "json-stringify"
         ]
     }, 
-    "json-parse": {}, 
-    "json-stringify": {}, 
+    "json-parse": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
+    "json-stringify": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
     "jsonp": {
         "requires": [
             "get", 
@@ -4242,7 +4272,8 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     }, 
     "scrollview-list": {
         "requires": [
-            "plugin"
+            "plugin", 
+            "classnamemanager"
         ], 
         "skinnable": true
     }, 
@@ -4335,20 +4366,32 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
             "sortable"
         ]
     }, 
-    "stylesheet": {}, 
+    "stylesheet": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
     "substitute": {
         "optional": [
             "dump"
+        ], 
+        "requires": [
+            "yui-base"
         ]
     }, 
     "swf": {
         "requires": [
             "event-custom", 
             "node", 
-            "swfdetect"
+            "swfdetect", 
+            "escape"
         ]
     }, 
-    "swfdetect": {}, 
+    "swfdetect": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
     "tabview": {
         "requires": [
             "widget", 
@@ -4393,8 +4436,16 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
             "text-data-accentfold"
         ]
     }, 
-    "text-data-accentfold": {}, 
-    "text-data-wordbreak": {}, 
+    "text-data-accentfold": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
+    "text-data-wordbreak": {
+        "requires": [
+            "yui-base"
+        ]
+    }, 
     "text-wordbreak": {
         "requires": [
             "array-extras", 
@@ -4489,9 +4540,10 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
     "widget-buttons": {
         "requires": [
             "widget", 
-            "base-build"
+            "base-build", 
+            "widget-stdmod"
         ], 
-        "skinnable": false
+        "skinnable": true
     }, 
     "widget-child": {
         "requires": [
@@ -4590,7 +4642,7 @@ YUI.Env[Y.version].modules = YUI.Env[Y.version].modules || {
         ]
     }
 };
-YUI.Env[Y.version].md5 = 'fbf2d694a982e8290f58fd1694becad2';
+YUI.Env[Y.version].md5 = '105ebffae27a0e3d7331f8cf5c0bb282';
 
 
 }, '3.4.0' ,{requires:['loader-base']});

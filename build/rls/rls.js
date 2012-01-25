@@ -158,7 +158,7 @@ Y._rls = function(what) {
             tests: 1 // required in the template
         },
         // The rls base path
-        rls_base = config.rls_base || 'http://l.yimg.com/py/load?httpcache=rls-seed&gzip=1&',
+        rls_base = config.rls_base || 'http://loader.yahooapis.com/v1/load?',
 
         // the template
         rls_tmpl = config.rls_tmpl || function() {
@@ -241,13 +241,19 @@ Y._rls = function(what) {
         }
     });
 
+    function addIfNeeded(module) {
+        if (Y.rls_needs(module)) {
+            m.unshift(module);
+        }
+    }
+
     //Add in the debug modules
     if (rls.filt === 'debug') {
-        m.unshift('dump', 'yui-log');
+        YArray.each(['dump', 'yui-log'], addIfNeeded);
     }
     //If they have a groups config, add the loader-base module
     if (Y.config.groups) {
-        m.unshift('loader-base');
+        addIfNeeded('loader-base');
     }
 
     m = YArray.dedupe(m);
@@ -344,9 +350,12 @@ if (!YUI.$rls) {
             Y = rls_active.inst;
         if (Y) {
             if (req.error) {
+                if (!req.missing) {
+                    req.missing = [];
+                }
                 Y.rls_failure({
                     message: req.error,
-                    data: req.modules
+                    data: [].concat(req.modules, req.missing)
                 });
             }
             if (YUI.Env && YUI.Env.rls_disabled) {

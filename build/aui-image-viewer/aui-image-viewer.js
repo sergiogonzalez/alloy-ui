@@ -14,6 +14,8 @@ var L = A.Lang,
 
 	NodeFx = A.Plugin.NodeFX,
 
+	DOC = A.config.doc,
+
 	ANIM = 'anim',
 	ARROW = 'arrow',
 	ARROW_LEFT_EL = 'arrowLeftEl',
@@ -109,7 +111,7 @@ var L = A.Lang,
 		width: AUTO
 	},
 
-	NODE_BLANK_TEXT = document.createTextNode(''),
+	NODE_BLANK_TEXT = DOC.createTextNode(''),
 
 	INFO_LABEL_TEMPLATE = 'Image {current} of {total}',
 
@@ -503,7 +505,7 @@ var ImageViewer = A.Component.create(
 			loader: {
 				readOnly: true,
 				valueFn: function() {
-					return A.Node.create(TPL_LOADER).appendTo(document.body);
+					return A.Node.create(TPL_LOADER).appendTo(DOC.body);
 				}
 			},
 
@@ -1016,7 +1018,9 @@ var ImageViewer = A.Component.create(
 			 */
 			_renderFooter: function() {
 				var instance = this;
+
 				var boundingBox = instance.get(BOUNDING_BOX);
+
 				var docFrag = boundingBox.get(OWNER_DOCUMENT).invoke(CREATE_DOCUMENT_FRAGMENT);
 
 				docFrag.append(
@@ -1166,7 +1170,7 @@ var ImageViewer = A.Component.create(
 				var total = instance.get(TOTAL_LINKS);
 				var current = instance.get(CURRENT_INDEX) + 1;
 
-				return A.substitute(v, {
+				return L.sub(v, {
 					current: current,
 					total: total
 				});
@@ -1429,7 +1433,7 @@ A.ImageViewer = ImageViewer;
  */
 A.ImageViewerMask = new A.OverlayMask().render();
 
-}, '@VERSION@' ,{requires:['anim','aui-overlay-mask','substitute'], skinnable:true});
+}, '@VERSION@' ,{skinnable:true, requires:['anim','aui-overlay-mask']});
 AUI.add('aui-image-viewer-gallery', function(A) {
 /**
  * The ImageGallery Utility
@@ -2104,7 +2108,6 @@ var ImageGallery = A.Component.create(
 					return false; // NOTE: return
 				}
 
-				var currentIndex = instance.get(CURRENT_INDEX);
 				var paginatorIndex = page - 1;
 
 				// check if the beforeState page number is different from the newState page number.
@@ -2112,21 +2115,34 @@ var ImageGallery = A.Component.create(
 					// updating currentIndex
 					instance.set(CURRENT_INDEX, paginatorIndex);
 
-					// loading current index image
-					instance.loadImage(
-						instance.getCurrentLink().attr(HREF)
-					);
-
 					// updating the UI of the paginator
 					paginatorInstance.setState(newState);
 
-					// restart the timer if the user change the image, respecting the paused state
-					var paused = instance.get(PAUSED);
-					var playing = instance.get(PLAYING);
+					instance._processChangeRequest();
+				}
+			},
 
-					if (playing && !paused) {
-						instance._startTimer();
-					}
+			/**
+			 * Process the change request.
+			 * Load image and restart the timer, if needed.
+			 *
+			 * @method _processChangeRequest
+			 * @protected
+			 */
+			_processChangeRequest: function() {
+				var instance = this;
+
+				// loading current index image
+				instance.loadImage(
+					instance.getCurrentLink().attr(HREF)
+				);
+
+				// restart the timer if the user change the image, respecting the paused state
+				var paused = instance.get(PAUSED);
+				var playing = instance.get(PLAYING);
+
+				if (playing && !paused) {
+					instance._startTimer();
 				}
 			},
 
@@ -2253,7 +2269,7 @@ var ImageGallery = A.Component.create(
 
 A.ImageGallery = ImageGallery;
 
-}, '@VERSION@' ,{requires:['aui-image-viewer-base','aui-paginator','aui-toolbar'], skinnable:true});
+}, '@VERSION@' ,{skinnable:true, requires:['aui-image-viewer-base','aui-paginator','aui-toolbar']});
 AUI.add('aui-media-viewer-plugin', function(A) {
 /**
  * The ImageViewer Media Plugin
@@ -2339,8 +2355,24 @@ var MediaViewerPlugin = A.Component.create(
 
 				var handles = instance._handles;
 
+				handles.changeReqeust = instance.afterHostMethod('_changeRequest', instance._restoreMedia);
+				handles.close = instance.beforeHostMethod('close', instance.close);
 				handles.loadMedia = instance.beforeHostMethod('loadImage', instance.loadMedia);
 				handles.preloadImage = instance.beforeHostMethod('preloadImage', instance.preloadImage);
+			},
+
+			close: function() {
+				var instance = this;
+
+				var host = instance.get('host');
+
+				var source = host.getCurrentLink();
+
+				var mediaType = instance._getMediaType(source.attr('href'));
+
+				if (mediaType != STR_IMAGE) {
+					host.setStdModContent(STR_BODY, '');
+				}
 			},
 
 			loadMedia: function(linkHref) {
@@ -2383,7 +2415,7 @@ var MediaViewerPlugin = A.Component.create(
 
 					host.set(STR_LOADING, false);
 
-					instance.fire(
+					host.fire(
 						'load',
 						{
 							media: media
@@ -2440,6 +2472,22 @@ var MediaViewerPlugin = A.Component.create(
 				);
 
 				return mediaType;
+			},
+
+			_restoreMedia: function(event) {
+				var instance = this;
+
+				var host = instance.get('host');
+
+				var source = host.getCurrentLink();
+
+				var href = source.attr('href');
+
+				var mediaType = instance._getMediaType(href);
+
+				if (mediaType != STR_IMAGE && !host.getStdModNode(STR_BODY).html()) {
+					host._processChangeRequest();
+				}
 			},
 
 			_uiSetContainerSize: function(width, height) {
@@ -2500,7 +2548,7 @@ A.MediaViewerPlugin = MediaViewerPlugin;
 
 A.MediaViewer = A.ImageViewer;
 
-}, '@VERSION@' ,{skinnable:false, requires:['aui-image-viewer-base']});
+}, '@VERSION@' ,{requires:['aui-image-viewer-base'], skinnable:false});
 
 
 AUI.add('aui-image-viewer', function(A){}, '@VERSION@' ,{use:['aui-image-viewer-base','aui-image-viewer-gallery','aui-media-viewer-plugin'], skinnable:true});

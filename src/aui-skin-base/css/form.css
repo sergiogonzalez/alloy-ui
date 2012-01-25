@@ -107,9 +107,10 @@
 	vertical-align: middle;
 }
 
-.aui-choice-label,
-.aui-field-input-choice {
+.aui-field-label-right .aui-choice-label,
+.aui-field-label-right .aui-field-input-choice {
 	float: left;
+	font-weight: bold;
 }
 
 .aui-field-row {
