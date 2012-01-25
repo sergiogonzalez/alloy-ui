@@ -110,6 +110,7 @@
 .aui-field-label-right .aui-choice-label,
 .aui-field-label-right .aui-field-input-choice {
 	float: left;
+	font-weight: bold;
 }
 
 .aui-field-row {
